@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `weight_logs_date_unique` ON `weight_logs` (`date`);

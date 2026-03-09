@@ -1,0 +1,5 @@
+{
+  "name": "htr-health",
+  "version": "0.1.0",
+  "description": "Health tracking via REST API. Track calories, macros, weight, water intake, sleep, daily targets and streaks."
+}
