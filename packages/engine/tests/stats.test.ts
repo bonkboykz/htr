@@ -7,6 +7,7 @@ import {
   logFood,
   logWater,
   logSleep,
+  setTarget,
 } from "../src/index.js";
 import type { DB, FoodItem } from "../src/index.js";
 
@@ -198,6 +199,109 @@ describe("stats engine", () => {
       const stats = getRangeStats(db, "2026-01-01", "2026-01-31");
       expect(stats.daysLogged).toBe(0);
       expect(stats.avgCalories).toBe(0);
+    });
+
+    it("returns days array with correct order and per-day totals", () => {
+      logFood(db, {
+        date: "2026-01-10",
+        mealId: "meal-lunch",
+        foodItemId: chicken.id,
+        servingGrams: 200,
+      });
+      logFood(db, {
+        date: "2026-01-12",
+        mealId: "meal-dinner",
+        foodItemId: chicken.id,
+        servingGrams: 300,
+      });
+      logWater(db, { date: "2026-01-10", amountMl: 2000 });
+      logSleep(db, {
+        startTime: "2026-01-11T23:00:00",
+        endTime: "2026-01-12T07:00:00",
+      });
+
+      const stats = getRangeStats(db, "2026-01-10", "2026-01-12");
+
+      expect(stats.days).toHaveLength(3);
+      expect(stats.days[0].date).toBe("2026-01-10");
+      expect(stats.days[1].date).toBe("2026-01-11");
+      expect(stats.days[2].date).toBe("2026-01-12");
+
+      // Day 1: food logged, water logged
+      expect(stats.days[0].calories).toBe(Math.round((165 * 200) / 100));
+      expect(stats.days[0].waterMl).toBe(2000);
+      expect(stats.days[0].sleepMinutes).toBe(0);
+
+      // Day 2: no food, no water, no sleep
+      expect(stats.days[1].calories).toBe(0);
+      expect(stats.days[1].waterMl).toBe(0);
+
+      // Day 3: food logged, sleep attributed
+      expect(stats.days[2].calories).toBe(Math.round((165 * 300) / 100));
+      expect(stats.days[2].sleepMinutes).toBe(480);
+    });
+
+    it("returns compliance with correct counts and rates when target exists", () => {
+      setTarget(db, {
+        effectiveDate: "2026-01-01",
+        calories: 2000,
+        protein: 200, // tenths of grams = 20g
+        fat: 500,
+        carbs: 2000,
+        waterMl: 2000,
+        sleepMinutes: 420,
+      });
+
+      // Day 1: under calories, above protein, above water, above sleep
+      logFood(db, {
+        date: "2026-01-10",
+        mealId: "meal-lunch",
+        foodItemId: chicken.id,
+        servingGrams: 200, // 330 cal, 620 protein (tenths)
+      });
+      logWater(db, { date: "2026-01-10", amountMl: 2500 });
+      logSleep(db, {
+        startTime: "2026-01-09T23:00:00",
+        endTime: "2026-01-10T07:00:00", // 480 min
+      });
+
+      // Day 2: no food (0 cal <= 2000 = compliant), no water (0 < 2000 = not compliant), no sleep
+      // Day 3: over calories
+      logFood(db, {
+        date: "2026-01-12",
+        mealId: "meal-lunch",
+        foodItemId: chicken.id,
+        servingGrams: 1500, // 2475 cal > 2000
+      });
+
+      const stats = getRangeStats(db, "2026-01-10", "2026-01-12");
+
+      expect(stats.compliance).not.toBeNull();
+      expect(stats.compliance!.totalDays).toBe(3);
+      // Calories: day1 (330 <= 2000 ✓), day2 (0 <= 2000 ✓), day3 (2475 > 2000 ✗)
+      expect(stats.compliance!.caloriesDays).toBe(2);
+      expect(stats.compliance!.caloriesRate).toBe(67);
+      // Protein: day1 (620 >= 200 ✓), day2 (0 < 200 ✗), day3 (4650 >= 200 ✓)
+      expect(stats.compliance!.proteinDays).toBe(2);
+      expect(stats.compliance!.proteinRate).toBe(67);
+      // Water: day1 (2500 >= 2000 ✓), day2 (0 ✗), day3 (0 ✗)
+      expect(stats.compliance!.waterDays).toBe(1);
+      expect(stats.compliance!.waterRate).toBe(33);
+      // Sleep: day1 (480 >= 420 ✓), day2 (0 ✗), day3 (0 ✗)
+      expect(stats.compliance!.sleepDays).toBe(1);
+      expect(stats.compliance!.sleepRate).toBe(33);
+    });
+
+    it("returns compliance null when no target exists", () => {
+      logFood(db, {
+        date: "2026-01-10",
+        mealId: "meal-lunch",
+        foodItemId: chicken.id,
+        servingGrams: 200,
+      });
+
+      const stats = getRangeStats(db, "2026-01-10", "2026-01-12");
+      expect(stats.compliance).toBeNull();
     });
   });
 });

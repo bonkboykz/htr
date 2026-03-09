@@ -6,7 +6,7 @@ description: >
   user asks about food logging, калории, макросы, "сколько съел", weight
   tracking, вес, water intake, вода, sleep tracking, сон, nutrition goals,
   КБЖУ, TDEE, "сколько калорий нужно", цель по весу.
-version: 0.2.0
+version: 0.3.0
 metadata:
   openclaw:
     emoji: "🏋️"
@@ -307,11 +307,13 @@ curl -s -H "$AUTH" "$HTR_API_URL/api/v1/stats/week?date=2026-03-09" | jq
 curl -s -H "$AUTH" "$HTR_API_URL/api/v1/stats/streaks" | jq
 ```
 
-### Range averages
+### Range stats (averages + daily breakdown + compliance)
 
 ```bash
 curl -s -H "$AUTH" "$HTR_API_URL/api/v1/stats/range?from=2026-03-01&to=2026-03-09" | jq
 ```
+
+Returns averages, plus `days` array (per-day calories/protein/fat/carbs/water/sleep) for mini-charts, and `compliance` object (how many days user hit each target, with rates 0-100). `compliance` is `null` if no target is set.
 
 ### Weight trend + EMA
 
@@ -447,3 +449,6 @@ Response fields include both raw and formatted variants:
 
 ### "Как далеко до цели по весу?"
 1. `GET /api/v1/goals/weight` → прогресс + estimated date
+
+### "Насколько я дисциплинирован?" / "Compliance за неделю"
+1. `GET /api/v1/stats/range?from=2026-03-03&to=2026-03-09` → `compliance` object with rates per metric

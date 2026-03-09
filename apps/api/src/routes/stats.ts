@@ -63,6 +63,16 @@ export function statsRoutes(db: DB) {
       avgCarbsFormatted: formatMacro(stats.avgCarbs),
       avgWaterMlFormatted: formatWater(stats.avgWaterMl),
       avgSleepFormatted: formatSleep(stats.avgSleepMinutes),
+      days: stats.days.map((day) => ({
+        ...day,
+        caloriesFormatted: formatCalories(day.calories),
+        proteinFormatted: formatMacro(day.protein),
+        fatFormatted: formatMacro(day.fat),
+        carbsFormatted: formatMacro(day.carbs),
+        waterFormatted: formatWater(day.waterMl),
+        sleepFormatted: formatSleep(day.sleepMinutes),
+      })),
+      compliance: stats.compliance,
     });
   });
 

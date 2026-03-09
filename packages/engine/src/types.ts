@@ -163,6 +163,28 @@ export interface WeightGoalProgress {
   tdee: TdeeCalculation | null;
 }
 
+export interface DayStats {
+  date: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  waterMl: number;
+  sleepMinutes: number;
+}
+
+export interface Compliance {
+  totalDays: number;
+  caloriesDays: number;
+  proteinDays: number;
+  waterDays: number;
+  sleepDays: number;
+  caloriesRate: number;
+  proteinRate: number;
+  waterRate: number;
+  sleepRate: number;
+}
+
 export interface RangeStats {
   from: string;
   to: string;
@@ -173,4 +195,6 @@ export interface RangeStats {
   avgWaterMl: number;
   avgSleepMinutes: number;
   daysLogged: number;
+  days: DayStats[];
+  compliance: Compliance | null;
 }

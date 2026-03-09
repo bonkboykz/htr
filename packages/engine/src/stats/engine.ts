@@ -4,7 +4,7 @@ import { schema } from "../db/index.js";
 import { getActiveTarget } from "../targets/engine.js";
 import { getDailyWater } from "../water/engine.js";
 import { getSleepForDate } from "../sleep/engine.js";
-import type { WeekSummary, Streaks, RangeStats, FoodLogEntry, SleepLogEntry } from "../types.js";
+import type { WeekSummary, Streaks, RangeStats, DayStats, Compliance, FoodLogEntry, SleepLogEntry } from "../types.js";
 
 function getMonday(dateStr: string): string {
   const d = new Date(dateStr);
@@ -190,12 +190,13 @@ export function getRangeStats(db: DB, from: string, to: string): RangeStats {
     )
     .all() as FoodLogEntry[];
 
-  const dailyTotals = new Map<
+  // Group food logs by date
+  const dailyFoodTotals = new Map<
     string,
     { calories: number; protein: number; fat: number; carbs: number }
   >();
   for (const log of foodLogs) {
-    const existing = dailyTotals.get(log.date) || {
+    const existing = dailyFoodTotals.get(log.date) || {
       calories: 0,
       protein: 0,
       fat: 0,
@@ -205,23 +206,28 @@ export function getRangeStats(db: DB, from: string, to: string): RangeStats {
     existing.protein += log.protein;
     existing.fat += log.fat;
     existing.carbs += log.carbs;
-    dailyTotals.set(log.date, existing);
+    dailyFoodTotals.set(log.date, existing);
   }
 
+  // Build per-day stats
+  const days: DayStats[] = [];
   let totalWaterMl = 0;
-  let waterDays = 0;
+  let waterDaysCount = 0;
   let totalSleepMin = 0;
-  let sleepDays = 0;
+  let sleepDaysCount = 0;
 
   const d = new Date(from);
   const end = new Date(to);
   while (d <= end) {
     const dateStr = d.toISOString().split("T")[0];
+    const food = dailyFoodTotals.get(dateStr) || { calories: 0, protein: 0, fat: 0, carbs: 0 };
+
     const water = getDailyWater(db, dateStr);
     if (water.totalMl > 0) {
       totalWaterMl += water.totalMl;
-      waterDays++;
+      waterDaysCount++;
     }
+
     const sleepEntries = getSleepForDate(db, dateStr);
     const daySlept = sleepEntries.reduce(
       (sum, e) => sum + sleepDurationMinutes(e),
@@ -229,21 +235,62 @@ export function getRangeStats(db: DB, from: string, to: string): RangeStats {
     );
     if (daySlept > 0) {
       totalSleepMin += daySlept;
-      sleepDays++;
+      sleepDaysCount++;
     }
+
+    days.push({
+      date: dateStr,
+      calories: food.calories,
+      protein: food.protein,
+      fat: food.fat,
+      carbs: food.carbs,
+      waterMl: water.totalMl,
+      sleepMinutes: daySlept,
+    });
+
     d.setDate(d.getDate() + 1);
   }
 
-  const daysLogged = dailyTotals.size;
-  const sum = [...dailyTotals.values()].reduce(
-    (acc, d) => ({
-      calories: acc.calories + d.calories,
-      protein: acc.protein + d.protein,
-      fat: acc.fat + d.fat,
-      carbs: acc.carbs + d.carbs,
+  const daysLogged = dailyFoodTotals.size;
+  const sum = [...dailyFoodTotals.values()].reduce(
+    (acc, v) => ({
+      calories: acc.calories + v.calories,
+      protein: acc.protein + v.protein,
+      fat: acc.fat + v.fat,
+      carbs: acc.carbs + v.carbs,
     }),
     { calories: 0, protein: 0, fat: 0, carbs: 0 }
   );
+
+  // Compute compliance against active target
+  const target = getActiveTarget(db, from);
+  let compliance: Compliance | null = null;
+  if (target) {
+    const totalDays = days.length;
+    let caloriesDays = 0;
+    let proteinDays = 0;
+    let waterDays = 0;
+    let sleepDays = 0;
+
+    for (const day of days) {
+      if (day.calories <= target.calories) caloriesDays++;
+      if (day.protein >= target.protein) proteinDays++;
+      if (day.waterMl >= target.waterMl) waterDays++;
+      if (day.sleepMinutes >= target.sleepMinutes) sleepDays++;
+    }
+
+    compliance = {
+      totalDays,
+      caloriesDays,
+      proteinDays,
+      waterDays,
+      sleepDays,
+      caloriesRate: totalDays ? Math.round(caloriesDays / totalDays * 100) : 0,
+      proteinRate: totalDays ? Math.round(proteinDays / totalDays * 100) : 0,
+      waterRate: totalDays ? Math.round(waterDays / totalDays * 100) : 0,
+      sleepRate: totalDays ? Math.round(sleepDays / totalDays * 100) : 0,
+    };
+  }
 
   return {
     from,
@@ -252,8 +299,10 @@ export function getRangeStats(db: DB, from: string, to: string): RangeStats {
     avgProtein: daysLogged ? Math.round(sum.protein / daysLogged) : 0,
     avgFat: daysLogged ? Math.round(sum.fat / daysLogged) : 0,
     avgCarbs: daysLogged ? Math.round(sum.carbs / daysLogged) : 0,
-    avgWaterMl: waterDays ? Math.round(totalWaterMl / waterDays) : 0,
-    avgSleepMinutes: sleepDays ? Math.round(totalSleepMin / sleepDays) : 0,
+    avgWaterMl: waterDaysCount ? Math.round(totalWaterMl / waterDaysCount) : 0,
+    avgSleepMinutes: sleepDaysCount ? Math.round(totalSleepMin / sleepDaysCount) : 0,
     daysLogged,
+    days,
+    compliance,
   };
 }
