@@ -1,0 +1,14 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "pnpm exec turbo build --filter=@htr/api"
+  },
+  "deploy": {
+    "startCommand": "pnpm --filter @htr/engine db:migrate && pnpm --filter @htr/engine db:seed && pnpm --filter @htr/api start",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}
