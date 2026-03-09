@@ -13,6 +13,17 @@ console.log("System meals seeded.");
 
 const app = createApp(db);
 
-serve({ fetch: app.fetch, port }, (info) => {
+const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`HTR API running on http://localhost:${info.port}`);
 });
+
+function shutdown() {
+  console.log("Shutting down gracefully...");
+  server.close(() => {
+    console.log("Server closed.");
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
