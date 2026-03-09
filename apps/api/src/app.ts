@@ -1,5 +1,9 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import type { DB } from "@htr/engine";
+import { AppError } from "./errors.js";
+import { apiKeyAuth } from "./middleware/auth.js";
 import { foodsRoutes } from "./routes/foods.js";
 import { foodLogsRoutes } from "./routes/food-logs.js";
 import { weightRoutes } from "./routes/weight.js";
@@ -12,8 +16,15 @@ import { statsRoutes } from "./routes/stats.js";
 export function createApp(db: DB) {
   const app = new Hono();
 
-  // Health check
+  // Global middleware
+  app.use("*", cors());
+  app.use("*", logger());
+
+  // Health check (before auth)
   app.get("/health", (c) => c.json({ status: "ok" }));
+
+  // API key auth for all API routes
+  app.use("/api/v1/*", apiKeyAuth());
 
   // Mount API routes
   app.route("/api/v1/foods", foodsRoutes(db));
@@ -27,6 +38,19 @@ export function createApp(db: DB) {
 
   // Global error handler
   app.onError((err, c) => {
+    if (err instanceof AppError) {
+      return c.json(
+        {
+          error: {
+            code: err.code,
+            message: err.message,
+            suggestion: err.suggestion || undefined,
+          },
+        },
+        err.status as any,
+      );
+    }
+
     console.error("Unhandled error:", err);
     return c.json(
       {
@@ -35,7 +59,7 @@ export function createApp(db: DB) {
           message: "An unexpected error occurred",
         },
       },
-      500
+      500,
     );
   });
 
