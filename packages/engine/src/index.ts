@@ -13,3 +13,5 @@ export * from "./weight/engine.js";
 export * from "./water/engine.js";
 export * from "./sleep/engine.js";
 export * from "./stats/engine.js";
+export * from "./profile/engine.js";
+export * from "./goals/engine.js";

@@ -2,10 +2,11 @@
 name: htr-health
 description: >
   Health tracking via REST API. Track calories, macros, weight, water intake,
-  sleep, daily targets and streaks. Use when user asks about food logging,
-  калории, макросы, "сколько съел", weight tracking, вес, water intake, вода,
-  sleep tracking, сон, nutrition goals, КБЖУ.
-version: 0.1.0
+  sleep, daily targets, streaks, TDEE calculation and weight goals. Use when
+  user asks about food logging, калории, макросы, "сколько съел", weight
+  tracking, вес, water intake, вода, sleep tracking, сон, nutrition goals,
+  КБЖУ, TDEE, "сколько калорий нужно", цель по весу.
+version: 0.2.0
 metadata:
   openclaw:
     emoji: "🏋️"
@@ -320,6 +321,62 @@ curl -s -H "$AUTH" "$HTR_API_URL/api/v1/stats/weight-trend?days=30" | jq
 
 ---
 
+## Profile
+
+### Set profile
+
+```bash
+curl -s -X PUT "$HTR_API_URL/api/v1/profile" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"heightCm": 178, "birthDate": "1998-05-15", "sex": "male", "activityLevel": "moderate"}' | jq
+```
+
+Activity levels: `sedentary`, `light`, `moderate`, `active`, `very_active`
+
+### Get profile
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/profile" | jq
+```
+
+### Get TDEE
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/profile/tdee" | jq
+```
+
+Returns BMR (Mifflin-St Jeor), TDEE, target calories (adjusted for weight goal deficit), and deficit.
+
+---
+
+## Weight Goals
+
+### Set weight goal
+
+```bash
+curl -s -X POST "$HTR_API_URL/api/v1/goals/weight" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"targetGrams": 70000, "pace": "normal"}' | jq
+```
+
+Pace: `slow` (0.25 kg/week), `normal` (0.5 kg/week), `fast` (1.0 kg/week). Requires at least one weight log entry.
+
+### Get goal progress
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/goals/weight" | jq
+```
+
+Returns progress %, estimated days left, estimated completion date, and TDEE calculation.
+
+### Delete weight goal
+
+```bash
+curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/goals/weight/{id}" | jq
+```
+
+---
+
 ## Units Convention
 
 All values stored as **integers** to avoid floating-point errors:
@@ -379,3 +436,14 @@ Response fields include both raw and formatted variants:
 
 ### "Покажи итоги за неделю"
 1. `GET /api/v1/stats/week?date=2026-03-09` → weekly averages
+
+### "Сколько калорий мне нужно есть?"
+1. `GET /api/v1/profile/tdee` → targetCalories
+
+### "Сколько калорий осталось сегодня?" / "How many calories left?"
+1. `GET /api/v1/daily/YYYY-MM-DD` → `caloriesBudget.remainingCalories`
+   - Shows remaining calories and progress toward daily target
+   - If negative, user exceeded their target
+
+### "Как далеко до цели по весу?"
+1. `GET /api/v1/goals/weight` → прогресс + estimated date

@@ -63,7 +63,7 @@ All values stored as integers to avoid floating-point errors.
 - Soft delete: `is_deleted = true` (never physical delete)
 - Food items are reusable — food_logs reference them with a serving multiplier
 
-## Database Schema (7 tables)
+## Database Schema (9 tables)
 
 ### food_items
 
@@ -203,6 +203,39 @@ CREATE TABLE sleep_logs (
 );
 ```
 
+### user_profile
+
+User profile (single row, id='default').
+
+```sql
+CREATE TABLE user_profile (
+  id              TEXT PRIMARY KEY,            -- always 'default'
+  height_cm       INTEGER NOT NULL,            -- cm
+  birth_date      TEXT NOT NULL,               -- YYYY-MM-DD
+  sex             TEXT NOT NULL,               -- 'male' | 'female'
+  activity_level  TEXT NOT NULL DEFAULT 'moderate', -- sedentary/light/moderate/active/very_active
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
+);
+```
+
+### weight_goals
+
+Weight goals with pace and progress tracking.
+
+```sql
+CREATE TABLE weight_goals (
+  id           TEXT PRIMARY KEY,              -- cuid2
+  target_grams INTEGER NOT NULL,              -- 70000 = 70 kg
+  pace         TEXT NOT NULL DEFAULT 'normal', -- slow/normal/fast
+  start_date   TEXT NOT NULL,                 -- YYYY-MM-DD
+  start_grams  INTEGER NOT NULL,              -- weight at goal creation
+  is_active    INTEGER NOT NULL DEFAULT 1,    -- only one active at a time
+  is_deleted   INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL
+);
+```
+
 ## Engine Pattern
 
 Every engine function takes `db: DB` as first argument (dependency injection):
@@ -234,6 +267,20 @@ export function getRangeStats(db: DB, from: string, to: string): RangeStats { ..
 // Targets
 export function getActiveTarget(db: DB, date: string): DailyTarget | null { ... }
 export function setTarget(db: DB, data: { effectiveDate: string; calories: number; protein: number; fat: number; carbs: number; waterMl?: number; sleepMinutes?: number }): DailyTarget { ... }
+
+// Profile engine
+export function setProfile(db: DB, data: { heightCm: number; birthDate: string; sex: string; activityLevel?: string }): UserProfile { ... }
+export function getProfile(db: DB): UserProfile | null { ... }
+export function calculateAge(birthDate: string, atDate?: string): number { ... }
+export function calculateBmr(profile: UserProfile, weightGrams: number): number { ... }
+export function calculateTdee(bmr: number, activityLevel: string): number { ... }
+export function getTargetCalories(db: DB, date?: string): TdeeCalculation | null { ... }
+
+// Goals engine
+export function setWeightGoal(db: DB, data: { targetGrams: number; pace?: string }): WeightGoal { ... }
+export function getActiveGoal(db: DB): WeightGoal | null { ... }
+export function getGoalProgress(db: DB): WeightGoalProgress | null { ... }
+export function deleteWeightGoal(db: DB, id: string): void { ... }
 ```
 
 This lets apps/api and tests each create their own db instance.
@@ -248,12 +295,38 @@ interface DailyNutrition {
   target: DailyTarget | null;
 }
 
+interface CaloriesBudget {
+  targetCalories: number; consumedCalories: number; remainingCalories: number;
+  targetCaloriesFormatted: string; consumedCaloriesFormatted: string;
+  remainingCaloriesFormatted: string; progress: number;
+}
+
 interface DailySummary {
   date: string;
+  caloriesBudget: CaloriesBudget | null;
+  tdee: TdeeCalculation | null;
   nutrition: DailyNutrition;
   water: { totalMl: number; targetMl: number };
   sleep: { totalMinutes: number; targetMinutes: number; quality: number | null };
   weight: WeightLogEntry | null;
+}
+
+interface UserProfile {
+  id: string; heightCm: number; birthDate: string; sex: string;
+  activityLevel: string; createdAt: string; updatedAt: string;
+}
+
+interface TdeeCalculation { bmr: number; tdee: number; targetCalories: number; deficit: number; }
+
+interface WeightGoal {
+  id: string; targetGrams: number; pace: string; startDate: string;
+  startGrams: number; isActive: number; isDeleted: number; createdAt: string;
+}
+
+interface WeightGoalProgress {
+  goal: WeightGoal; currentGrams: number; remainingGrams: number;
+  progressPercent: number; estimatedDaysLeft: number; estimatedDate: string;
+  direction: "loss" | "gain"; tdee: TdeeCalculation | null;
 }
 
 interface WeekSummary {
@@ -350,6 +423,22 @@ interface Streaks {
 | GET    | `/api/v1/stats/range?from=&to=`   | Range averages           |
 | GET    | `/api/v1/stats/weight-trend?days=`| Weight trend + EMA       |
 
+### Profile — `/api/v1/profile`
+
+| Method | Path                    | Description                    |
+|--------|-------------------------|--------------------------------|
+| GET    | `/api/v1/profile`       | Get user profile               |
+| PUT    | `/api/v1/profile`       | Create/update profile (UPSERT) |
+| GET    | `/api/v1/profile/tdee`  | TDEE + target calories         |
+
+### Weight Goals — `/api/v1/goals`
+
+| Method | Path                         | Description              |
+|--------|------------------------------|--------------------------|
+| POST   | `/api/v1/goals/weight`       | Set weight goal          |
+| GET    | `/api/v1/goals/weight`       | Active goal + progress   |
+| DELETE | `/api/v1/goals/weight/:id`   | Soft delete              |
+
 ### Health Check
 
 | Method | Path        | Description |
@@ -411,6 +500,8 @@ pnpm db:seed          # Seed system meals (packages/engine)
 - Sleep engine: `packages/engine/src/sleep/engine.ts`
 - Stats engine: `packages/engine/src/stats/engine.ts`
 - Targets engine: `packages/engine/src/targets/engine.ts`
+- Profile engine: `packages/engine/src/profile/engine.ts`
+- Goals engine: `packages/engine/src/goals/engine.ts`
 - Formatting: `packages/engine/src/format/index.ts`
 - API routes: `apps/api/src/routes/{resource}.ts`
 - API app: `apps/api/src/app.ts`
@@ -443,6 +534,7 @@ Commands:
 - `docs/section-3-engines.md` — Engine functions, algorithms, test scenarios
 - `docs/section-4-rest-api.md` — REST API routes, Zod schemas, responses
 - `docs/section-5-assembly.md` — Build prompts, OpenClaw skill, deploy
+- `docs/section-6-factors-correlations.md` — Factors & correlations spec (future)
 
 ## Build Order
 

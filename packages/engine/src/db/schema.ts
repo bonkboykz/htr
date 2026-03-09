@@ -82,6 +82,33 @@ export const waterLogs = sqliteTable("water_logs", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+export const userProfile = sqliteTable("user_profile", {
+  id: text("id").primaryKey(),
+  heightCm: integer("height_cm").notNull(),
+  birthDate: text("birth_date").notNull(),
+  sex: text("sex").notNull(),
+  activityLevel: text("activity_level").notNull().default("moderate"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+export const weightGoals = sqliteTable("weight_goals", {
+  id: text("id").primaryKey(),
+  targetGrams: integer("target_grams").notNull(),
+  pace: text("pace").notNull().default("normal"),
+  startDate: text("start_date").notNull(),
+  startGrams: integer("start_grams").notNull(),
+  isActive: integer("is_active").notNull().default(1),
+  isDeleted: integer("is_deleted").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
 export const sleepLogs = sqliteTable("sleep_logs", {
   id: text("id").primaryKey(),
   startTime: text("start_time").notNull(),

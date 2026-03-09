@@ -6,6 +6,7 @@ import {
   getSleepDurationMinutes,
   getActiveTarget,
   getLatestWeight,
+  getTargetCalories,
   formatCalories,
   formatMacro,
   formatWater,
@@ -80,8 +81,37 @@ export function dailyRoutes(db: DB) {
     const target = getActiveTarget(db, date);
     const targetSleepMinutes = target?.sleepMinutes ?? 480;
 
+    // TDEE
+    const tdeeCalc = getTargetCalories(db, date);
+
+    // Calories budget (only when TDEE is available)
+    const caloriesBudget = tdeeCalc
+      ? (() => {
+          const consumed = nutrition.totals.calories;
+          const remaining = tdeeCalc.targetCalories - consumed;
+          return {
+            targetCalories: tdeeCalc.targetCalories,
+            targetCaloriesFormatted: formatCalories(tdeeCalc.targetCalories),
+            consumedCalories: consumed,
+            consumedCaloriesFormatted: formatCalories(consumed),
+            remainingCalories: remaining,
+            remainingCaloriesFormatted: formatCalories(remaining),
+            progress: formatProgress(consumed, tdeeCalc.targetCalories),
+          };
+        })()
+      : null;
+
     return c.json({
       date,
+      caloriesBudget,
+      tdee: tdeeCalc
+        ? {
+            ...tdeeCalc,
+            bmrFormatted: formatCalories(tdeeCalc.bmr),
+            tdeeFormatted: formatCalories(tdeeCalc.tdee),
+            targetCaloriesFormatted: formatCalories(tdeeCalc.targetCalories),
+          }
+        : null,
       nutrition: {
         meals: formattedMeals,
         totals: {

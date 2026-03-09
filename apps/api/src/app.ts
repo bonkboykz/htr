@@ -12,6 +12,8 @@ import { sleepRoutes } from "./routes/sleep.js";
 import { dailyRoutes } from "./routes/daily.js";
 import { targetsRoutes } from "./routes/targets.js";
 import { statsRoutes } from "./routes/stats.js";
+import { profileRoutes } from "./routes/profile.js";
+import { goalsRoutes } from "./routes/goals.js";
 
 export function createApp(db: DB) {
   const app = new Hono();
@@ -35,6 +37,8 @@ export function createApp(db: DB) {
   app.route("/api/v1/daily", dailyRoutes(db));
   app.route("/api/v1/targets", targetsRoutes(db));
   app.route("/api/v1/stats", statsRoutes(db));
+  app.route("/api/v1/profile", profileRoutes(db));
+  app.route("/api/v1/goals", goalsRoutes(db));
 
   // Global error handler
   app.onError((err, c) => {

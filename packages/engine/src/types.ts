@@ -124,6 +124,45 @@ export interface Streaks {
   sleepGoal: { current: number; best: number };
 }
 
+export interface UserProfile {
+  id: string;
+  heightCm: number;
+  birthDate: string;
+  sex: string;
+  activityLevel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TdeeCalculation {
+  bmr: number;
+  tdee: number;
+  targetCalories: number;
+  deficit: number;
+}
+
+export interface WeightGoal {
+  id: string;
+  targetGrams: number;
+  pace: string;
+  startDate: string;
+  startGrams: number;
+  isActive: number;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export interface WeightGoalProgress {
+  goal: WeightGoal;
+  currentGrams: number;
+  remainingGrams: number;
+  progressPercent: number;
+  estimatedDaysLeft: number;
+  estimatedDate: string;
+  direction: "loss" | "gain";
+  tdee: TdeeCalculation | null;
+}
+
 export interface RangeStats {
   from: string;
   to: string;

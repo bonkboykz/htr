@@ -288,6 +288,100 @@ describe("API", () => {
       expect(body.nutrition).toBeDefined();
       expect(body.water).toBeDefined();
       expect(body.sleep).toBeDefined();
+      expect(body).toHaveProperty("tdee");
+    });
+
+    it("GET /api/v1/daily/:date returns null caloriesBudget when no profile", async () => {
+      const res = await app.request("/api/v1/daily/2026-03-09");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.caloriesBudget).toBeNull();
+    });
+  });
+
+  describe("Profile", () => {
+    it("GET /api/v1/profile returns 404 when no profile", async () => {
+      const res = await app.request("/api/v1/profile");
+      expect(res.status).toBe(404);
+    });
+
+    it("PUT /api/v1/profile creates profile", async () => {
+      const res = await app.request("/api/v1/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          heightCm: 178,
+          birthDate: "1998-05-15",
+          sex: "male",
+          activityLevel: "moderate",
+        }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.heightCm).toBe(178);
+      expect(body.sex).toBe("male");
+    });
+
+    it("GET /api/v1/profile returns profile", async () => {
+      const res = await app.request("/api/v1/profile");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.heightCm).toBe(178);
+    });
+
+    it("GET /api/v1/profile/tdee returns TDEE", async () => {
+      const res = await app.request("/api/v1/profile/tdee");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.bmr).toBeGreaterThan(0);
+      expect(body.tdee).toBeGreaterThan(body.bmr);
+      expect(body.tdeeFormatted).toBeDefined();
+    });
+  });
+
+  describe("Weight Goals", () => {
+    it("GET /api/v1/goals/weight returns 404 when no goal", async () => {
+      const res = await app.request("/api/v1/goals/weight");
+      expect(res.status).toBe(404);
+    });
+
+    it("POST /api/v1/goals/weight sets a goal", async () => {
+      const res = await app.request("/api/v1/goals/weight", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetGrams: 70000,
+          pace: "normal",
+        }),
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.targetGrams).toBe(70000);
+      expect(body.targetFormatted).toBeDefined();
+    });
+
+    it("GET /api/v1/goals/weight returns progress", async () => {
+      const res = await app.request("/api/v1/goals/weight");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.progressPercent).toBeDefined();
+      expect(body.direction).toBe("loss");
+      expect(body.estimatedDate).toBeDefined();
+    });
+  });
+
+  describe("Daily Summary with TDEE", () => {
+    it("GET /api/v1/daily/:date includes caloriesBudget when profile exists", async () => {
+      // Profile + weight set in previous describe blocks
+      const res = await app.request("/api/v1/daily/2026-03-09");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.caloriesBudget).not.toBeNull();
+      expect(body.caloriesBudget.targetCalories).toBeGreaterThan(0);
+      expect(body.caloriesBudget.consumedCalories).toBeGreaterThanOrEqual(0);
+      expect(typeof body.caloriesBudget.remainingCalories).toBe("number");
+      expect(body.caloriesBudget.remainingCaloriesFormatted).toBeDefined();
+      expect(body.caloriesBudget.progress).toBeGreaterThanOrEqual(0);
     });
   });
 
