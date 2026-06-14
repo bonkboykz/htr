@@ -5,7 +5,7 @@
     "buildCommand": "pnpm exec turbo build --filter=@htr/api"
   },
   "deploy": {
-    "startCommand": "pnpm --filter @htr/engine db:migrate && pnpm --filter @htr/engine db:seed && pnpm --filter @htr/api start",
+    "startCommand": "pnpm --filter @htr/engine db:migrate && pnpm --filter @htr/engine db:seed && cd apps/api && exec node_modules/.bin/tsx src/index.ts",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",
