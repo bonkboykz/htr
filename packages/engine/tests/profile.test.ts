@@ -92,9 +92,9 @@ describe("Profile Engine", () => {
         createdAt: "",
         updatedAt: "",
       };
-      // Male: 10 * 75.5 + 6.25 * 178 - 5 * 27 + 5
+      // Male, age 27 at 2026-03-09: 10 * 75.5 + 6.25 * 178 - 5 * 27 + 5
       // = 755 + 1112.5 - 135 + 5 = 1737.5 → 1738
-      const bmr = calculateBmr(profile, 75500);
+      const bmr = calculateBmr(profile, 75500, "2026-03-09");
       expect(bmr).toBe(1738);
     });
 
@@ -108,9 +108,9 @@ describe("Profile Engine", () => {
         createdAt: "",
         updatedAt: "",
       };
-      // Female: 10 * 60 + 6.25 * 165 - 5 * 27 - 161
+      // Female, age 27 at 2026-03-09: 10 * 60 + 6.25 * 165 - 5 * 27 - 161
       // = 600 + 1031.25 - 135 - 161 = 1335.25 → 1335
-      const bmr = calculateBmr(profile, 60000);
+      const bmr = calculateBmr(profile, 60000, "2026-03-09");
       expect(bmr).toBe(1335);
     });
   });

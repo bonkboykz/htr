@@ -83,9 +83,13 @@ export function calculateAge(birthDate: string, atDate?: string): number {
   return age;
 }
 
-export function calculateBmr(profile: UserProfile, weightGrams: number): number {
+export function calculateBmr(
+  profile: UserProfile,
+  weightGrams: number,
+  atDate?: string,
+): number {
   const weightKg = weightGrams / 1000;
-  const age = calculateAge(profile.birthDate);
+  const age = calculateAge(profile.birthDate, atDate);
 
   if (profile.sex === "male") {
     return Math.round(10 * weightKg + 6.25 * profile.heightCm - 5 * age + 5);
@@ -105,7 +109,7 @@ export function getTargetCalories(db: DB, date?: string): TdeeCalculation | null
   const latestWeight = getLatestWeight(db);
   if (!latestWeight) return null;
 
-  const bmr = calculateBmr(profile, latestWeight.weightGrams);
+  const bmr = calculateBmr(profile, latestWeight.weightGrams, date);
   const tdee = calculateTdee(bmr, profile.activityLevel);
 
   // Check for active weight goal

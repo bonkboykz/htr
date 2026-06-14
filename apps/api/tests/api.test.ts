@@ -183,7 +183,9 @@ describe("API", () => {
     });
 
     it("GET /api/v1/weight lists weight entries", async () => {
-      const res = await app.request("/api/v1/weight");
+      // wide window so the fixed 2026-03-09 seed is always inside it,
+      // regardless of when the suite runs (default days=30 is relative to today)
+      const res = await app.request("/api/v1/weight?days=100000");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.length).toBeGreaterThan(0);
