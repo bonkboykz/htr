@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'branch_pager.dart';
 import '../features/today/presentation/today_page.dart';
 import '../features/workout/presentation/workout_page.dart';
+import '../features/workout/presentation/session_detail_page.dart';
 import '../features/nutrition/presentation/nutrition_page.dart';
 import '../features/progress/presentation/progress_page.dart';
 import '../features/insights/presentation/insights_page.dart';
@@ -50,6 +51,12 @@ final appRouter = GoRouter(
               GoRoute(
                 path: 'program',
                 builder: (context, state) => const ProgramPage(),
+              ),
+              // Детали тренировки из истории.
+              GoRoute(
+                path: 'session/:id',
+                builder: (c, s) =>
+                    SessionDetailPage(sessionId: s.pathParameters['id']!),
               ),
             ],
           ),

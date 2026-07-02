@@ -259,6 +259,182 @@ class SetInput extends Equatable {
   List<Object?> get props => [weightG, reps, rir];
 }
 
+/// GET /api/v1/training/sessions — one row in the history list.
+/// Also used to detect the ACTIVE session (endedAt == null).
+class SessionSummary extends Equatable {
+  final String id;
+  final String routineId;
+  final String routineName;
+  final int sessionIndex;
+  final String startedAt;
+  final String? endedAt;
+  final int? durationS;
+  final int totalSets;
+  final int totalVolumeG;
+  final String volumeFormatted;
+
+  const SessionSummary({
+    required this.id,
+    required this.routineId,
+    required this.routineName,
+    required this.sessionIndex,
+    required this.startedAt,
+    required this.endedAt,
+    required this.durationS,
+    required this.totalSets,
+    required this.totalVolumeG,
+    required this.volumeFormatted,
+  });
+
+  bool get isActive => endedAt == null;
+
+  factory SessionSummary.fromJson(Map<String, dynamic> j) => SessionSummary(
+        id: j['id'].toString(),
+        routineId: j['routineId'].toString(),
+        routineName: (j['routineName'] ?? '').toString(),
+        sessionIndex: (j['sessionIndex'] as num?)?.toInt() ?? 0,
+        startedAt: (j['startedAt'] ?? '').toString(),
+        endedAt: j['endedAt']?.toString(),
+        durationS: (j['durationS'] as num?)?.toInt(),
+        totalSets: (j['totalSets'] as num?)?.toInt() ?? 0,
+        totalVolumeG: (j['totalVolumeG'] as num?)?.toInt() ?? 0,
+        volumeFormatted: (j['volumeFormatted'] ?? '').toString(),
+      );
+
+  @override
+  List<Object?> get props => [
+        id,
+        routineId,
+        routineName,
+        sessionIndex,
+        startedAt,
+        endedAt,
+        durationS,
+        totalSets,
+        totalVolumeG,
+        volumeFormatted,
+      ];
+}
+
+/// One set inside a session detail (GET /sessions/:id → sets[]).
+class SessionSet extends Equatable {
+  final String id;
+  final String exerciseId;
+  final String exerciseName;
+  final int setNumber;
+  final int weightG;
+  final String weightFormatted;
+  final int reps;
+  final int? rir;
+  final int? durationS;
+  final bool isWarmup;
+
+  const SessionSet({
+    required this.id,
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.setNumber,
+    required this.weightG,
+    required this.weightFormatted,
+    required this.reps,
+    required this.rir,
+    required this.durationS,
+    required this.isWarmup,
+  });
+
+  factory SessionSet.fromJson(Map<String, dynamic> j) => SessionSet(
+        id: j['id'].toString(),
+        exerciseId: j['exerciseId'].toString(),
+        exerciseName: (j['exerciseName'] ?? '').toString(),
+        setNumber: (j['setNumber'] as num?)?.toInt() ?? 0,
+        weightG: (j['weightG'] as num?)?.toInt() ?? 0,
+        weightFormatted: (j['weightFormatted'] ?? '').toString(),
+        reps: (j['reps'] as num?)?.toInt() ?? 0,
+        rir: (j['rir'] as num?)?.toInt(),
+        durationS: (j['durationS'] as num?)?.toInt(),
+        isWarmup: j['isWarmup'] == true || j['isWarmup'] == 1,
+      );
+
+  @override
+  List<Object?> get props => [
+        id,
+        exerciseId,
+        exerciseName,
+        setNumber,
+        weightG,
+        weightFormatted,
+        reps,
+        rir,
+        durationS,
+        isWarmup,
+      ];
+}
+
+/// GET /api/v1/training/sessions/:id — full detail (summary + its sets).
+class SessionDetail extends Equatable {
+  final String id;
+  final String routineName;
+  final int sessionIndex;
+  final String startedAt;
+  final String? endedAt;
+  final int? durationS;
+  final String? durationFormatted;
+  final int totalSets;
+  final int totalVolumeG;
+  final String volumeFormatted;
+  final List<SessionSet> sets;
+
+  const SessionDetail({
+    required this.id,
+    required this.routineName,
+    required this.sessionIndex,
+    required this.startedAt,
+    required this.endedAt,
+    required this.durationS,
+    required this.durationFormatted,
+    required this.totalSets,
+    required this.totalVolumeG,
+    required this.volumeFormatted,
+    required this.sets,
+  });
+
+  bool get isActive => endedAt == null;
+
+  factory SessionDetail.fromJson(Map<String, dynamic> j) {
+    final s = (j['session'] as Map<String, dynamic>?) ?? const {};
+    return SessionDetail(
+      id: s['id'].toString(),
+      routineName: (s['routineName'] ?? '').toString(),
+      sessionIndex: (s['sessionIndex'] as num?)?.toInt() ?? 0,
+      startedAt: (s['startedAt'] ?? '').toString(),
+      endedAt: s['endedAt']?.toString(),
+      durationS: (s['durationS'] as num?)?.toInt(),
+      durationFormatted: s['durationFormatted']?.toString(),
+      totalSets: (s['totalSets'] as num?)?.toInt() ?? 0,
+      totalVolumeG: (s['totalVolumeG'] as num?)?.toInt() ?? 0,
+      volumeFormatted: (s['volumeFormatted'] ?? '').toString(),
+      sets: ((j['sets'] as List?) ?? const [])
+          .map((e) => SessionSet.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        id,
+        routineName,
+        sessionIndex,
+        startedAt,
+        endedAt,
+        durationS,
+        durationFormatted,
+        totalSets,
+        totalVolumeG,
+        volumeFormatted,
+        sets,
+      ];
+}
+
 /// A set already logged this session (for the "Готово" chips).
 class LoggedSet extends Equatable {
   final int weightG;

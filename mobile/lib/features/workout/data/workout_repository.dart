@@ -57,4 +57,50 @@ class WorkoutRepository {
     );
     return ((json as Map<String, dynamic>)['duration_s'] as num?)?.toInt() ?? 0;
   }
+
+  /// Session history (newest first). Active session has endedAt == null.
+  Future<List<SessionSummary>> sessions() async {
+    final json = await _api.get('/api/v1/training/sessions');
+    return (json as List)
+        .map((e) => SessionSummary.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<SessionDetail> sessionDetail(String id) async {
+    final json = await _api.get('/api/v1/training/sessions/$id');
+    return SessionDetail.fromJson(json as Map<String, dynamic>);
+  }
+
+  /// Exercise catalog — used to look up per-exercise weight increments.
+  Future<List<Exercise>> exercises() async {
+    final json = await _api.get('/api/v1/training/exercises');
+    return (json as List)
+        .map((e) => Exercise.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updateSet(
+    String sessionId,
+    String setId, {
+    int? weightG,
+    int? reps,
+    int? rir,
+  }) async {
+    final body = <String, dynamic>{};
+    if (weightG != null) body['weight_g'] = weightG;
+    if (reps != null) body['reps'] = reps;
+    if (rir != null) body['rir'] = rir;
+    await _api.patch(
+      '/api/v1/training/sessions/$sessionId/sets/$setId',
+      body: body,
+    );
+  }
+
+  Future<void> deleteSet(String sessionId, String setId) async {
+    await _api.delete('/api/v1/training/sessions/$sessionId/sets/$setId');
+  }
+
+  Future<void> deleteSession(String id) async {
+    await _api.delete('/api/v1/training/sessions/$id');
+  }
 }

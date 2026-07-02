@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/di/di.dart';
@@ -20,6 +21,27 @@ String _formatClock(int seconds) {
   final m = (seconds ~/ 60).toString().padLeft(2, '0');
   final s = (seconds % 60).toString().padLeft(2, '0');
   return '$m:$s';
+}
+
+const _months = [
+  'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
+  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+];
+
+String _formatDate(String iso) {
+  final d = DateTime.tryParse(iso)?.toLocal();
+  if (d == null) return iso;
+  return '${d.day} ${_months[d.month - 1]}';
+}
+
+/// "1ч 05м" / "42м" from a seconds count.
+String _formatDurationShort(int? seconds) {
+  if (seconds == null) return '—';
+  final total = seconds ~/ 60;
+  final h = total ~/ 60;
+  final m = total % 60;
+  if (h > 0) return '$hч ${m.toString().padLeft(2, '0')}м';
+  return '$mм';
 }
 
 class WorkoutPage extends StatelessWidget {
@@ -151,6 +173,7 @@ class _Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!state.live) return _IdleView(state: state);
     final plan = state.plan!;
     return Column(
       children: [
@@ -215,17 +238,13 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final plan = state.plan!;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       color: AppColors.bg,
       child: Column(
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-                onPressed: () => context.canPop() ? context.pop() : null,
-              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -891,9 +910,246 @@ class _FinishBar extends StatelessWidget {
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: Colors.white),
               )
-            : const Icon(Icons.flag_outlined),
+            : const Icon(LucideIcons.flag),
         label: const Text('Завершить тренировку'),
       ),
+    );
+  }
+}
+
+/// Shown when there is no active session: a "Начать тренировку" card + История.
+class _IdleView extends StatelessWidget {
+  final WorkoutState state;
+  const _IdleView({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          color: AppColors.bg,
+          child: Text(
+            'Тренировка',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              _StartCard(state: state),
+              const SizedBox(height: 12),
+              const _ProgramCard(),
+              const SizedBox(height: 24),
+              if (state.history.isNotEmpty) ...[
+                _SectionHeader(
+                  title: 'ИСТОРИЯ',
+                  color: AppColors.accent,
+                  trailing: '${state.history.length}',
+                ),
+                const SizedBox(height: 8),
+                for (final s in state.history)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _HistoryRow(session: s),
+                  ),
+              ] else
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Пока нет завершённых тренировок.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StartCard extends StatelessWidget {
+  final WorkoutState state;
+  const _StartCard({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = state.plan;
+    final name = (plan != null && plan.displayName.isNotEmpty)
+        ? plan.displayName
+        : 'Тренировка';
+    final sessionIndex = plan?.sessionIndex ?? state.today?.sessionIndex ?? 0;
+    final isRampup = plan?.isRampup ?? state.today?.isRampup ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name,
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Занятие $sessionIndex/10',
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              if (isRampup)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.green.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                  ),
+                  child: const Text('ramp-up',
+                      style: TextStyle(
+                          color: AppColors.green,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: state.busy
+                  ? null
+                  : () => context.read<WorkoutCubit>().startWorkout(),
+              icon: state.busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(LucideIcons.play, size: 20),
+              label: const Text('Начать'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  final SessionSummary session;
+  const _HistoryRow({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadii.card),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        onTap: () => context.push('/workout/session/${session.id}'),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.card),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          _formatDate(session.startedAt),
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Занятие ${session.sessionIndex}',
+                          style: const TextStyle(
+                              color: AppColors.textMuted, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      session.routineName.isEmpty
+                          ? 'Тренировка'
+                          : session.routineName,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
+                      children: [
+                        _MetaChip(
+                          icon: LucideIcons.timer,
+                          text: _formatDurationShort(session.durationS),
+                        ),
+                        _MetaChip(
+                          icon: LucideIcons.dumbbell,
+                          text: session.volumeFormatted,
+                        ),
+                        _MetaChip(
+                          icon: LucideIcons.listChecks,
+                          text: '${session.totalSets} подх.',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(LucideIcons.chevronRight,
+                  color: AppColors.textMuted, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _MetaChip({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: AppColors.textMuted),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: const TextStyle(
+              color: AppColors.textSecondary, fontSize: 12),
+        ),
+      ],
     );
   }
 }

@@ -16,7 +16,14 @@ class WorkoutState extends Equatable {
   final String? error;
   final bool unauthorized;
 
-  /// Live session (null until the first set is logged).
+  /// True → show the LIVE logging view (an active session is in progress).
+  /// False → show the "Начать тренировку" card + history list.
+  final bool live;
+
+  /// Past sessions (endedAt != null), newest first — for the История list.
+  final List<SessionSummary> history;
+
+  /// Live session id. Set when resuming an active session or after "Начать".
   final String? sessionId;
   final int elapsedSeconds;
 
@@ -41,6 +48,8 @@ class WorkoutState extends Equatable {
     this.today,
     this.error,
     this.unauthorized = false,
+    this.live = false,
+    this.history = const [],
     this.sessionId,
     this.elapsedSeconds = 0,
     this.inputs = const {},
@@ -58,6 +67,8 @@ class WorkoutState extends Equatable {
     TrainingToday? today,
     String? error,
     bool? unauthorized,
+    bool? live,
+    List<SessionSummary>? history,
     String? sessionId,
     int? elapsedSeconds,
     Map<String, SetInput>? inputs,
@@ -74,6 +85,8 @@ class WorkoutState extends Equatable {
       today: today ?? this.today,
       error: error,
       unauthorized: unauthorized ?? this.unauthorized,
+      live: live ?? this.live,
+      history: history ?? this.history,
       sessionId: sessionId ?? this.sessionId,
       elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
       inputs: inputs ?? this.inputs,
@@ -92,6 +105,8 @@ class WorkoutState extends Equatable {
         today,
         error,
         unauthorized,
+        live,
+        history,
         sessionId,
         elapsedSeconds,
         inputs,
@@ -112,16 +127,51 @@ class WorkoutCubit extends Cubit<WorkoutState> {
     _timer?.cancel();
     emit(const WorkoutState(status: WorkoutStatus.loading));
     try {
+      final sessions = await _repo.sessions();
       final today = await _repo.today();
-      final plan = await _repo.plan(today.routineId, today.sessionIndex);
-      emit(state.copyWith(
-        status: WorkoutStatus.ready,
-        today: today,
-        plan: plan,
-        inputs: _seedInputs(plan),
-        logged: const {},
-        expandedId: plan.main.isNotEmpty ? plan.main.first.routineExercise.id : null,
-      ));
+
+      SessionSummary? active;
+      for (final s in sessions) {
+        if (s.isActive) {
+          active = s;
+          break;
+        }
+      }
+
+      if (active != null) {
+        // Resume the in-progress session → LIVE view seeded with logged sets.
+        final detail = await _repo.sessionDetail(active.id);
+        final plan =
+            await _repo.plan(active.routineId, active.sessionIndex);
+        emit(state.copyWith(
+          status: WorkoutStatus.ready,
+          today: today,
+          plan: plan,
+          live: true,
+          history: sessions.where((s) => !s.isActive).toList(),
+          sessionId: active.id,
+          elapsedSeconds: _elapsedSince(active.startedAt),
+          inputs: _seedInputs(plan),
+          logged: _loggedFromDetail(plan, detail),
+          expandedId:
+              plan.main.isNotEmpty ? plan.main.first.routineExercise.id : null,
+        ));
+        _startTimer();
+      } else {
+        // No active session → start card + history. Load today's plan for the card.
+        final plan = await _repo.plan(today.routineId, today.sessionIndex);
+        emit(state.copyWith(
+          status: WorkoutStatus.ready,
+          today: today,
+          plan: plan,
+          live: false,
+          history: sessions.where((s) => !s.isActive).toList(),
+          inputs: _seedInputs(plan),
+          logged: const {},
+          expandedId:
+              plan.main.isNotEmpty ? plan.main.first.routineExercise.id : null,
+        ));
+      }
     } on ApiException catch (e) {
       emit(state.copyWith(
         status: WorkoutStatus.error,
@@ -130,6 +180,57 @@ class WorkoutCubit extends Cubit<WorkoutState> {
       ));
     } catch (e) {
       emit(state.copyWith(status: WorkoutStatus.error, error: e.toString()));
+    }
+  }
+
+  int _elapsedSince(String startedAt) {
+    final start = DateTime.tryParse(startedAt);
+    if (start == null) return 0;
+    final secs = DateTime.now().difference(start).inSeconds;
+    return secs < 0 ? 0 : secs;
+  }
+
+  /// Seed the "Готово" map from a resumed session's already-logged sets,
+  /// keyed by routineExercise.id (sets carry exerciseId → map via the plan).
+  Map<String, List<LoggedSet>> _loggedFromDetail(
+    WorkoutPlan plan,
+    SessionDetail detail,
+  ) {
+    final reIdByExercise = <String, String>{};
+    for (final item in plan.all) {
+      reIdByExercise[item.exercise.id] = item.routineExercise.id;
+    }
+    final map = <String, List<LoggedSet>>{};
+    for (final s in detail.sets) {
+      final reId = reIdByExercise[s.exerciseId];
+      if (reId == null) continue;
+      (map[reId] ??= <LoggedSet>[])
+          .add(LoggedSet(weightG: s.weightG, reps: s.reps, rir: s.rir));
+    }
+    return map;
+  }
+
+  /// Start a session from the "Начать" card and switch into live mode.
+  Future<void> startWorkout() async {
+    final today = state.today;
+    if (today == null || state.busy) return;
+    emit(state.copyWith(busy: true, error: null));
+    try {
+      final started =
+          await _repo.startSession(today.routineId, today.sessionIndex);
+      emit(state.copyWith(
+        busy: false,
+        live: true,
+        sessionId: started.sessionId,
+        elapsedSeconds: 0,
+        logged: const {},
+      ));
+      _startTimer();
+    } on ApiException catch (e) {
+      emit(state.copyWith(
+          busy: false, error: e.message, unauthorized: e.isUnauthorized));
+    } catch (e) {
+      emit(state.copyWith(busy: false, error: e.toString()));
     }
   }
 
