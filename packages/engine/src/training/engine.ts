@@ -106,7 +106,7 @@ export function startSession(
   const last = lastSession(db);
   const sessionIndex =
     input.session_index ?? (last ? (last.sessionIndex % 10) + 1 : 1);
-  const startedAt = new Date().toISOString();
+  const startedAt = input.started_at ?? new Date().toISOString();
   db.insert(schema.workoutSessions)
     .values({
       id,
@@ -206,7 +206,13 @@ export function endSession(
   }
 
   const endedAt = input.ended_at ?? new Date().toISOString();
-  const updates: { endedAt: string; notes?: string } = { endedAt };
+  // Backdating: an explicit started_at corrects the session's start time so
+  // duration and the date threaded through analytics reflect the real workout.
+  const startedAt = input.started_at ?? session.startedAt;
+  const updates: { endedAt: string; startedAt?: string; notes?: string } = {
+    endedAt,
+  };
+  if (input.started_at !== undefined) updates.startedAt = input.started_at;
   if (input.notes !== undefined) updates.notes = input.notes;
   db.update(schema.workoutSessions)
     .set(updates)
@@ -216,8 +222,7 @@ export function endSession(
   const durationS = Math.max(
     0,
     Math.round(
-      (new Date(endedAt).getTime() - new Date(session.startedAt).getTime()) /
-        1000,
+      (new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000,
     ),
   );
   return { duration_s: durationS };

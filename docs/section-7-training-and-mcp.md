@@ -80,10 +80,10 @@ ramp-up (session_index ≤ 3):     action="rampup",  вес ≈ 65% рабоче
 |--------|------|------------|
 | `GET`  | `/today` | `{ routine_id, session_index, is_rampup }` |
 | `GET`  | `/routines/:id/plan?sessionIndex=` | весь экран: план + `lastPerformance` + `suggestion` по каждому упражнению |
-| `POST` | `/sessions` | старт → `{ session_id, session_index }` |
+| `POST` | `/sessions` | старт (`{ routine_id, session_index?, started_at? }`, `started_at` ISO 8601 для бэкдейтинга) → `{ session_id, session_index }` |
 | `POST` | `/sessions/:id/sets` | записать подход → `{ set_id }` |
 | `POST` | `/sessions/:id/sets/quick` | повторить прошлый подход (`{ exercise_id }`) |
-| `PATCH`| `/sessions/:id` | закрыть (`{ ended_at?, notes? }`) → `{ duration_s }` |
+| `PATCH`| `/sessions/:id` | закрыть (`{ started_at?, ended_at?, notes? }`, `started_at` корректирует старт) → `{ duration_s }` |
 
 ### Аналитика
 | Метод | Путь | Назначение |

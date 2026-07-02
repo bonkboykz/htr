@@ -50,6 +50,19 @@ describe("HTR MCP tools", () => {
     expect(bench.suggestion).toBeTruthy();
   });
 
+  it("start_session backdates via started_at and end_session computes duration", () => {
+    const { session_id } = call(db, "start_session", {
+      routine_id: "routine-a",
+      session_index: 5,
+      started_at: "2026-06-03T09:00:00.000Z",
+    });
+    const end = call(db, "end_session", {
+      session_id,
+      ended_at: "2026-06-03T10:00:00.000Z",
+    });
+    expect(end.duration_s).toBe(3600);
+  });
+
   it("log_weight then get_weight_trend reflects the entry", () => {
     const entry = call(db, "log_weight", {
       date: "2026-07-01",

@@ -42,6 +42,33 @@ describe("Training API", () => {
     sessionId = body.session_id;
   });
 
+  it("POST /sessions accepts a backdated started_at", async () => {
+    const res = await app.request(
+      "/api/v1/training/sessions",
+      json({
+        routine_id: "routine-a",
+        session_index: 6,
+        started_at: "2026-06-03T09:00:00.000Z",
+      }),
+    );
+    expect(res.status).toBe(201);
+    const sid = (await res.json()).session_id;
+
+    const patchRes = await app.request(`/api/v1/training/sessions/${sid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ended_at: "2026-06-03T10:00:00.000Z" }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect((await patchRes.json()).duration_s).toBe(3600);
+
+    const sessions = await (
+      await app.request("/api/v1/training/sessions")
+    ).json();
+    const mine = sessions.find((s: any) => s.id === sid);
+    expect(mine.startedAt).toBe("2026-06-03T09:00:00.000Z");
+  });
+
   it("POST /sessions/:id/sets logs 3 working sets for bench", async () => {
     for (let setNumber = 1; setNumber <= 3; setNumber++) {
       const res = await app.request(

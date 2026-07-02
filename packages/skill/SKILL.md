@@ -413,6 +413,7 @@ curl -s -X POST "$HTR_API_URL/api/v1/training/sessions" \
 ```
 
 `session_index` is derived if omitted. Returns `{ session_id, session_index }`.
+Pass `started_at` (full ISO 8601, user's local timezone) to backdate a past workout, e.g. `{"routine_id": "routine-a", "started_at": "2026-06-03T09:00:00Z"}`.
 
 ### Log a set
 

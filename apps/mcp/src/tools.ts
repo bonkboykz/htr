@@ -417,7 +417,7 @@ export const tools: ToolDef[] = [
     name: "start_session",
     tier: "WRITE_TRAINING",
     description:
-      "[WRITE] Start a workout session for a routine (session_index derived if omitted).",
+      "[WRITE] Start a workout session for a routine (session_index derived if omitted). Pass started_at (full ISO 8601 in the user's local timezone) to backdate a past workout; defaults to now.",
     schema: StartSessionInput,
     handler: (db, args) => startSession(db, StartSessionInput.parse(args)),
   },
@@ -436,7 +436,7 @@ export const tools: ToolDef[] = [
     name: "end_session",
     tier: "WRITE_TRAINING",
     description:
-      "[WRITE] End a workout session (optional ended_at + notes). Returns duration in seconds.",
+      "[WRITE] End a workout session (optional ended_at + notes). Can also correct/backdate started_at (full ISO 8601); duration is recomputed from the corrected start. Returns duration in seconds.",
     schema: EndSessionSchema,
     handler: (db, args) => {
       const { session_id, ...rest } = EndSessionSchema.parse(args);

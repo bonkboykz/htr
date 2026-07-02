@@ -25,9 +25,11 @@ export const LogSetInput = z.object({
 export const StartSessionInput = z.object({
   routine_id: z.string(),
   session_index: z.number().int().min(1).optional(), // derived if omitted
+  started_at: z.string().datetime().optional(), // ISO 8601, backdating; default = now
 });
 
 export const EndSessionInput = z.object({
+  started_at: z.string().datetime().optional(), // ISO 8601, corrects/backdates the start
   ended_at: z.string().datetime().optional(), // default = now
   notes: z.string().max(2000).optional(),
 });

@@ -303,6 +303,71 @@ describe("training: session lifecycle & analytics", () => {
     expect(plan.sections.warmup.every((i) => i.suggestion === null)).toBe(true);
   });
 
+  it("startSession stores an explicit started_at (backdating), not now()", () => {
+    const backdated = "2026-06-03T09:00:00.000Z";
+    const s = startSession(db, {
+      routine_id: "routine-a",
+      session_index: 5,
+      started_at: backdated,
+    });
+    const row = db
+      .select()
+      .from(schema.workoutSessions)
+      .where(eq(schema.workoutSessions.id, s.session_id))
+      .get() as any;
+    expect(row.startedAt).toBe(backdated);
+  });
+
+  it("startSession without started_at stores a recent now() timestamp", () => {
+    const before = Date.now();
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    const row = db
+      .select()
+      .from(schema.workoutSessions)
+      .where(eq(schema.workoutSessions.id, s.session_id))
+      .get() as any;
+    const t = Date.parse(row.startedAt);
+    expect(Number.isNaN(t)).toBe(false);
+    expect(row.startedAt).not.toBe("2026-06-03T09:00:00.000Z");
+    expect(t).toBeGreaterThanOrEqual(before - 1000);
+    expect(t).toBeLessThanOrEqual(Date.now() + 1000);
+  });
+
+  it("endSession with both manual timestamps computes duration from them", () => {
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    const end = endSession(db, s.session_id, {
+      started_at: "2026-06-03T09:00:00.000Z",
+      ended_at: "2026-06-03T10:00:00.000Z",
+    });
+    expect(end.duration_s).toBe(3600);
+  });
+
+  it("endSession backdating corrects the start and threads through analytics", () => {
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    logSet(db, s.session_id, {
+      exercise_id: BENCH,
+      set_number: 1,
+      weight_g: 50000,
+      reps: 10,
+      rir: 2,
+      is_warmup: false,
+    });
+    const end = endSession(db, s.session_id, {
+      started_at: "2026-06-03T09:00:00.000Z",
+      ended_at: "2026-06-03T10:30:00.000Z",
+    });
+    expect(end.duration_s).toBe(5400);
+
+    const sessions = listSessions(db);
+    const mine = sessions.find((x) => x.id === s.session_id)!;
+    expect(mine.startedAt).toBe("2026-06-03T09:00:00.000Z");
+    expect(mine.durationS).toBe(5400);
+
+    const prog = getProgression(db, BENCH);
+    expect(prog.points).toHaveLength(1);
+    expect(prog.points[0].date).toBe("2026-06-03");
+  });
+
   it("getProgression builds an e1RM trend across sessions", () => {
     completedBenchSession(db, 5, [{ weight_g: 50000, reps: 10, rir: 2 }]);
     completedBenchSession(db, 6, [{ weight_g: 55000, reps: 8, rir: 1 }]);
