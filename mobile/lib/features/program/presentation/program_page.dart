@@ -694,6 +694,7 @@ Future<void> _showExerciseSheet(
   ProgramExercise? existing,
 }) async {
   await cubit.loadCatalog();
+  if (!context.mounted) return;
   final state = cubit.state;
   final result = await showModalBottomSheet<_ExerciseFormResult>(
     context: context,
@@ -1073,7 +1074,7 @@ class _ExercisePickerState extends State<_ExercisePicker> {
                     )
                   : ListView.separated(
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final e = items[i];
                         return ListTile(

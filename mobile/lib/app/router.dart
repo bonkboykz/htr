@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import 'branch_pager.dart';
 import '../features/today/presentation/today_page.dart';
 import '../features/workout/presentation/workout_page.dart';
 import '../features/nutrition/presentation/nutrition_page.dart';
@@ -22,8 +23,10 @@ final appRouter = GoRouter(
       path: '/settings',
       builder: (context, state) => const SettingsPage(),
     ),
-    StatefulShellRoute.indexedStack(
-      builder: (context, state, shell) => _Shell(shell: shell),
+    StatefulShellRoute(
+      builder: (context, state, shell) => shell,
+      navigatorContainerBuilder: (context, shell, children) =>
+          _Shell(shell: shell, children: children),
       branches: [
         StatefulShellBranch(routes: [
           GoRoute(
@@ -67,12 +70,13 @@ final appRouter = GoRouter(
 
 class _Shell extends StatelessWidget {
   final StatefulNavigationShell shell;
-  const _Shell({required this.shell});
+  final List<Widget> children;
+  const _Shell({required this.shell, required this.children});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: shell,
+      body: BranchPager(navigationShell: shell, children: children),
       bottomNavigationBar: NavigationBar(
         selectedIndex: shell.currentIndex,
         onDestinationSelected: (i) =>

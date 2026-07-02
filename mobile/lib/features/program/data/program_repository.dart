@@ -43,7 +43,7 @@ class ProgramRepository {
       'name': name,
       'name_ru': nameRu,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
-      if (sortOrder != null) 'sort_order': sortOrder,
+      'sort_order': ?sortOrder,
     };
     final json = await _api.post('/api/v1/training/routines', body: body);
     return Routine.fromJson(json as Map<String, dynamic>);
@@ -56,9 +56,9 @@ class ProgramRepository {
     String? notes,
   }) async {
     final body = <String, dynamic>{
-      if (name != null) 'name': name,
-      if (nameRu != null) 'name_ru': nameRu,
-      if (notes != null) 'notes': notes,
+      'name': ?name,
+      'name_ru': ?nameRu,
+      'notes': ?notes,
     };
     final json =
         await _api.patch('/api/v1/training/routines/$id', body: body);
@@ -83,11 +83,11 @@ class ProgramRepository {
     final body = <String, dynamic>{
       'exercise_id': exerciseId,
       'section': section,
-      if (sortOrder != null) 'sort_order': sortOrder,
+      'sort_order': ?sortOrder,
       'target_sets': targetSets,
       'rep_min': repMin,
       'rep_max': repMax,
-      if (targetRir != null) 'target_rir': targetRir,
+      'target_rir': ?targetRir,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     };
     final json = await _api
@@ -108,14 +108,14 @@ class ProgramRepository {
     String? notes,
   }) async {
     final body = <String, dynamic>{
-      if (exerciseId != null) 'exercise_id': exerciseId,
-      if (section != null) 'section': section,
-      if (sortOrder != null) 'sort_order': sortOrder,
-      if (targetSets != null) 'target_sets': targetSets,
-      if (repMin != null) 'rep_min': repMin,
-      if (repMax != null) 'rep_max': repMax,
-      if (targetRir != null) 'target_rir': targetRir,
-      if (notes != null) 'notes': notes,
+      'exercise_id': ?exerciseId,
+      'section': ?section,
+      'sort_order': ?sortOrder,
+      'target_sets': ?targetSets,
+      'rep_min': ?repMin,
+      'rep_max': ?repMax,
+      'target_rir': ?targetRir,
+      'notes': ?notes,
     };
     final json = await _api.patch(
         '/api/v1/training/routines/$routineId/exercises/$reId',
