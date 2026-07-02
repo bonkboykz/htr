@@ -786,6 +786,7 @@ class _ExpandedBody extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 14),
+        // Weight on its own row (wider, primary control)…
         Row(
           children: [
             Expanded(
@@ -796,7 +797,12 @@ class _ExpandedBody extends StatelessWidget {
                 onPlus: () => cubit.stepWeight(re.id, ex.minIncrementG),
               ),
             ),
-            const SizedBox(width: 8),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // …reps + RIR share the next row.
+        Row(
+          children: [
             Expanded(
               child: SetStepper(
                 label: 'Повторы',
