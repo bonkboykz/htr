@@ -51,7 +51,12 @@ class _ProgramView extends StatelessWidget {
               case ProgramStatus.error:
                 return _ErrorView(state: state);
               case ProgramStatus.ready:
-                return _Content(state: state);
+                return Stack(
+                  children: [
+                    _Content(state: state),
+                    if (state.mutating) const _MutationOverlay(),
+                  ],
+                );
             }
           },
         ),
@@ -215,7 +220,7 @@ class _RoutineCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  _RoutineMenu(routine: routine),
                   Icon(
                     expanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
                     color: AppColors.textSecondary,
@@ -231,16 +236,19 @@ class _RoutineCard extends StatelessWidget {
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: CircularProgressIndicator()),
               )
-            else if (items == null || items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 20),
-                child: Text(
-                  'В этой тренировке пока нет упражнений.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              )
-            else
-              _Composition(state: state, routine: routine, items: items),
+            else ...[
+              if (items == null || items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text(
+                    'В этой тренировке пока нет упражнений.',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                )
+              else
+                _Composition(state: state, routine: routine, items: items),
+              _AddExerciseRow(routine: routine),
+            ],
           ],
         ],
       ),
@@ -355,6 +363,8 @@ class _SectionBlock extends StatelessWidget {
         if (expanded)
           for (final item in items)
             _ExerciseRow(
+              routine: routine,
+              item: item,
               name: state.exerciseName(item.exerciseId),
               target: item.targetLabel,
             ),
@@ -364,43 +374,72 @@ class _SectionBlock extends StatelessWidget {
 }
 
 class _ExerciseRow extends StatelessWidget {
+  final Routine routine;
+  final ProgramExercise item;
   final String name;
   final String target;
-  const _ExerciseRow({required this.name, required this.target});
+  const _ExerciseRow({
+    required this.routine,
+    required this.item,
+    required this.name,
+    required this.target,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Row(
-        children: [
-          const Icon(LucideIcons.gripVertical,
-              size: 18, color: AppColors.textMuted),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                    color: AppColors.textPrimary,
+    final cubit = context.read<ProgramCubit>();
+    return InkWell(
+      onTap: () => _showExerciseSheet(
+        context,
+        cubit,
+        routineId: routine.id,
+        existing: item,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.gripVertical,
+                size: 18, color: AppColors.textMuted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  target,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
+                  const SizedBox(height: 2),
+                  Text(
+                    target,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            IconButton(
+              icon: const Icon(LucideIcons.trash2, size: 18),
+              color: AppColors.textMuted,
+              tooltip: 'Удалить',
+              onPressed: () async {
+                final ok = await _confirm(
+                  context,
+                  title: 'Удалить упражнение?',
+                  message: '«$name» будет удалено из тренировки.',
+                );
+                if (ok) cubit.deleteExercise(routine.id, item.id);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -440,12 +479,8 @@ class _CreateRoutineButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadii.card),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.card),
-        onTap: () {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(const SnackBar(
-                content: Text('Редактирование программы скоро')));
-        },
+        onTap: () =>
+            _showRoutineDialog(context, context.read<ProgramCubit>()),
         child: const Padding(
           padding: EdgeInsets.symmetric(vertical: 18),
           child: Row(
@@ -463,6 +498,595 @@ class _CreateRoutineButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------- CRUD affordances ----------
+
+class _MutationOverlay extends StatelessWidget {
+  const _MutationOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Positioned.fill(
+      child: ColoredBox(
+        color: Color(0x66F6F7F9),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    );
+  }
+}
+
+class _RoutineMenu extends StatelessWidget {
+  final Routine routine;
+  const _RoutineMenu({required this.routine});
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<ProgramCubit>();
+    return PopupMenuButton<String>(
+      icon: const Icon(LucideIcons.moreVertical,
+          color: AppColors.textSecondary, size: 20),
+      onSelected: (value) async {
+        switch (value) {
+          case 'edit':
+            await _showRoutineDialog(context, cubit, routine: routine);
+            break;
+          case 'delete':
+            final ok = await _confirm(
+              context,
+              title: 'Удалить тренировку?',
+              message:
+                  '«${routine.displayName}» и все её упражнения будут удалены.',
+            );
+            if (ok) cubit.deleteRoutine(routine.id);
+            break;
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'edit', child: Text('Изменить')),
+        PopupMenuItem(value: 'delete', child: Text('Удалить')),
+      ],
+    );
+  }
+}
+
+class _AddExerciseRow extends StatelessWidget {
+  final Routine routine;
+  const _AddExerciseRow({required this.routine});
+
+  @override
+  Widget build(BuildContext context) {
+    final cubit = context.read<ProgramCubit>();
+    return InkWell(
+      onTap: () => _showExerciseSheet(context, cubit, routineId: routine.id),
+      child: const Padding(
+        padding: EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Row(
+          children: [
+            Icon(LucideIcons.plus, size: 18, color: AppColors.accent),
+            SizedBox(width: 8),
+            Text(
+              'упражнение',
+              style: TextStyle(
+                color: AppColors.accent,
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<bool> _confirm(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) async {
+  final res = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Удалить'),
+        ),
+      ],
+    ),
+  );
+  return res == true;
+}
+
+Future<void> _showRoutineDialog(
+  BuildContext context,
+  ProgramCubit cubit, {
+  Routine? routine,
+}) async {
+  final isEdit = routine != null;
+  final nameCtrl = TextEditingController(text: routine?.displayName ?? '');
+  final notesCtrl = TextEditingController(text: routine?.notes ?? '');
+
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(isEdit ? 'Изменить тренировку' : 'Новая тренировка'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: nameCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(labelText: 'Название'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: notesCtrl,
+            minLines: 1,
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+            decoration:
+                const InputDecoration(labelText: 'Заметки (необязательно)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (nameCtrl.text.trim().isEmpty) return;
+            Navigator.of(ctx).pop(true);
+          },
+          child: Text(isEdit ? 'Сохранить' : 'Создать'),
+        ),
+      ],
+    ),
+  );
+
+  if (saved != true) return;
+  final name = nameCtrl.text.trim();
+  final notes = notesCtrl.text.trim();
+  if (isEdit) {
+    await cubit.updateRoutine(routine.id, nameRu: name, notes: notes);
+  } else {
+    await cubit.createRoutine(
+        nameRu: name, notes: notes.isEmpty ? null : notes);
+  }
+}
+
+class _ExerciseFormResult {
+  final String exerciseId;
+  final String section;
+  final int targetSets;
+  final int repMin;
+  final int repMax;
+  final int targetRir;
+  const _ExerciseFormResult({
+    required this.exerciseId,
+    required this.section,
+    required this.targetSets,
+    required this.repMin,
+    required this.repMax,
+    required this.targetRir,
+  });
+}
+
+Future<void> _showExerciseSheet(
+  BuildContext context,
+  ProgramCubit cubit, {
+  required String routineId,
+  ProgramExercise? existing,
+}) async {
+  await cubit.loadCatalog();
+  final state = cubit.state;
+  final result = await showModalBottomSheet<_ExerciseFormResult>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.card)),
+    ),
+    builder: (_) => _ExerciseSheet(
+      catalog: state.catalog,
+      existing: existing,
+      initialName: existing != null
+          ? state.exerciseName(existing.exerciseId)
+          : null,
+    ),
+  );
+  if (result == null) return;
+  if (existing == null) {
+    await cubit.addExercise(
+      routineId,
+      exerciseId: result.exerciseId,
+      section: result.section,
+      targetSets: result.targetSets,
+      repMin: result.repMin,
+      repMax: result.repMax,
+      targetRir: result.targetRir,
+    );
+  } else {
+    await cubit.updateExercise(
+      routineId,
+      existing.id,
+      exerciseId: result.exerciseId,
+      section: result.section,
+      targetSets: result.targetSets,
+      repMin: result.repMin,
+      repMax: result.repMax,
+      targetRir: result.targetRir,
+    );
+  }
+}
+
+class _ExerciseSheet extends StatefulWidget {
+  final List<ProgramCatalogExercise> catalog;
+  final ProgramExercise? existing;
+  final String? initialName;
+  const _ExerciseSheet({
+    required this.catalog,
+    this.existing,
+    this.initialName,
+  });
+
+  @override
+  State<_ExerciseSheet> createState() => _ExerciseSheetState();
+}
+
+class _ExerciseSheetState extends State<_ExerciseSheet> {
+  String? _exerciseId;
+  String? _exerciseName;
+  late String _section;
+  late int _sets;
+  late int _repMin;
+  late int _repMax;
+  late int _rir;
+
+  @override
+  void initState() {
+    super.initState();
+    final ex = widget.existing;
+    _exerciseId = ex?.exerciseId;
+    _exerciseName = widget.initialName;
+    _section = ex?.section ?? 'main';
+    _sets = ex?.targetSets ?? 3;
+    _repMin = ex?.repMin ?? 8;
+    _repMax = ex?.repMax ?? 12;
+    _rir = ex?.targetRir ?? 2;
+  }
+
+  bool get _valid =>
+      _exerciseId != null && _repMin >= 1 && _repMax >= _repMin && _sets >= 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.existing != null;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isEdit ? 'Изменить упражнение' : 'Добавить упражнение',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              borderRadius: BorderRadius.circular(AppRadii.inner),
+              onTap: _pickExercise,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: BorderRadius.circular(AppRadii.inner),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.dumbbell,
+                        size: 18, color: AppColors.textSecondary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _exerciseName ?? 'Выберите упражнение',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: _exerciseName == null
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const Icon(LucideIcons.chevronRight,
+                        size: 18, color: AppColors.textMuted),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Секция',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [for (final s in kSectionOrder) _sectionChip(s)],
+            ),
+            const SizedBox(height: 8),
+            _StepperRow(
+              label: 'Подходы',
+              value: _sets,
+              min: 1,
+              max: 12,
+              onChanged: (v) => setState(() => _sets = v),
+            ),
+            _StepperRow(
+              label: 'Повторы (мин)',
+              value: _repMin,
+              min: 1,
+              max: 60,
+              onChanged: (v) => setState(() {
+                _repMin = v;
+                if (_repMax < _repMin) _repMax = _repMin;
+              }),
+            ),
+            _StepperRow(
+              label: 'Повторы (макс)',
+              value: _repMax,
+              min: _repMin,
+              max: 60,
+              onChanged: (v) => setState(() => _repMax = v),
+            ),
+            _StepperRow(
+              label: 'RIR',
+              value: _rir,
+              min: 0,
+              max: 5,
+              onChanged: (v) => setState(() => _rir = v),
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: _valid
+                  ? () => Navigator.of(context).pop(
+                        _ExerciseFormResult(
+                          exerciseId: _exerciseId!,
+                          section: _section,
+                          targetSets: _sets,
+                          repMin: _repMin,
+                          repMax: _repMax,
+                          targetRir: _rir,
+                        ),
+                      )
+                  : null,
+              child: Text(isEdit ? 'Сохранить' : 'Добавить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickExercise() async {
+    final picked = await showModalBottomSheet<ProgramCatalogExercise>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadii.card)),
+      ),
+      builder: (_) => _ExercisePicker(catalog: widget.catalog),
+    );
+    if (picked != null) {
+      setState(() {
+        _exerciseId = picked.id;
+        _exerciseName = picked.displayName;
+      });
+    }
+  }
+
+  Widget _sectionChip(String s) {
+    final meta = _sectionMeta(s);
+    final selected = _section == s;
+    return ChoiceChip(
+      label: Text(meta.label),
+      selected: selected,
+      onSelected: (_) => setState(() => _section = s),
+      showCheckmark: false,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : meta.color,
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+      ),
+      selectedColor: meta.color,
+      backgroundColor: AppColors.surface,
+      side: BorderSide(color: meta.color),
+    );
+  }
+}
+
+class _StepperRow extends StatelessWidget {
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+  const _StepperRow({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 15, color: AppColors.textPrimary)),
+          ),
+          _RoundIconButton(
+            icon: LucideIcons.minus,
+            onTap: value > min ? () => onChanged(value - 1) : null,
+          ),
+          SizedBox(
+            width: 44,
+            child: Text('$value',
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          ),
+          _RoundIconButton(
+            icon: LucideIcons.plus,
+            onTap: value < max ? () => onChanged(value + 1) : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _RoundIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Material(
+      color: enabled ? AppColors.accentSoft : AppColors.bg,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon,
+              size: 18,
+              color: enabled ? AppColors.accent : AppColors.textMuted),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExercisePicker extends StatefulWidget {
+  final List<ProgramCatalogExercise> catalog;
+  const _ExercisePicker({required this.catalog});
+
+  @override
+  State<_ExercisePicker> createState() => _ExercisePickerState();
+}
+
+class _ExercisePickerState extends State<_ExercisePicker> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _q.trim().toLowerCase();
+    final items = query.isEmpty
+        ? widget.catalog
+        : widget.catalog
+            .where((e) =>
+                e.displayName.toLowerCase().contains(query) ||
+                e.name.toLowerCase().contains(query))
+            .toList();
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.75,
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: TextField(
+                autofocus: true,
+                onChanged: (v) => setState(() => _q = v),
+                decoration: InputDecoration(
+                  hintText: 'Поиск упражнения',
+                  prefixIcon: const Icon(LucideIcons.search, size: 18),
+                  filled: true,
+                  fillColor: AppColors.bg,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadii.inner),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: items.isEmpty
+                  ? const Center(
+                      child: Text('Ничего не найдено',
+                          style: TextStyle(color: AppColors.textSecondary)),
+                    )
+                  : ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final e = items[i];
+                        return ListTile(
+                          title: Text(e.displayName),
+                          subtitle: e.muscleGroup != null
+                              ? Text(e.muscleGroup!)
+                              : null,
+                          onTap: () => Navigator.of(context).pop(e),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );

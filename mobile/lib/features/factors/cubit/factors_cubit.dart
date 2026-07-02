@@ -12,6 +12,9 @@ class FactorsState extends Equatable {
   final FactorsStatus status;
   final List<FactorGroup> groups;
 
+  /// All categories (for the "add factor" picker). May include empty ones.
+  final List<FactorCategory> categories;
+
   /// Working values keyed by factorId (seeded from existing logs).
   final Map<String, int> values;
 
@@ -21,26 +24,33 @@ class FactorsState extends Equatable {
   /// True while a bulk-save is in flight.
   final bool saving;
 
+  /// True while a factor/category create/delete is in flight.
+  final bool mutating;
+
   /// Non-null right after a successful save → drives the success snackbar.
   final String? savedMessage;
 
   const FactorsState({
     this.status = FactorsStatus.initial,
     this.groups = const [],
+    this.categories = const [],
     this.values = const {},
     this.error,
     this.unauthorized = false,
     this.saving = false,
+    this.mutating = false,
     this.savedMessage,
   });
 
   FactorsState copyWith({
     FactorsStatus? status,
     List<FactorGroup>? groups,
+    List<FactorCategory>? categories,
     Map<String, int>? values,
     String? error,
     bool? unauthorized,
     bool? saving,
+    bool? mutating,
     String? savedMessage,
     bool clearError = false,
     bool clearSavedMessage = false,
@@ -48,18 +58,29 @@ class FactorsState extends Equatable {
     return FactorsState(
       status: status ?? this.status,
       groups: groups ?? this.groups,
+      categories: categories ?? this.categories,
       values: values ?? this.values,
       error: clearError ? null : (error ?? this.error),
       unauthorized: unauthorized ?? this.unauthorized,
       saving: saving ?? this.saving,
+      mutating: mutating ?? this.mutating,
       savedMessage:
           clearSavedMessage ? null : (savedMessage ?? this.savedMessage),
     );
   }
 
   @override
-  List<Object?> get props =>
-      [status, groups, values, error, unauthorized, saving, savedMessage];
+  List<Object?> get props => [
+        status,
+        groups,
+        categories,
+        values,
+        error,
+        unauthorized,
+        saving,
+        mutating,
+        savedMessage,
+      ];
 }
 
 class FactorsCubit extends Cubit<FactorsState> {
@@ -79,9 +100,17 @@ class FactorsCubit extends Cubit<FactorsState> {
           if (f.value != null) values[f.factor.id] = f.value!;
         }
       }
+      // Categories for the picker; fall back to those embedded in groups.
+      List<FactorCategory> categories;
+      try {
+        categories = await _repo.loadCategories();
+      } catch (_) {
+        categories = [for (final g in groups) g.category];
+      }
       emit(state.copyWith(
         status: FactorsStatus.ready,
         groups: groups,
+        categories: categories,
         values: values,
       ));
     } on ApiException catch (e) {
@@ -136,6 +165,104 @@ class FactorsCubit extends Cubit<FactorsState> {
     } catch (e) {
       emit(state.copyWith(saving: false, error: e.toString()));
       emit(state.copyWith(clearError: true));
+    }
+  }
+
+  /// (Re)load just the category list, without disturbing the screen status.
+  Future<void> loadCategories() async {
+    try {
+      final categories = await _repo.loadCategories();
+      emit(state.copyWith(categories: categories));
+    } catch (_) {
+      // Non-fatal: the picker can fall back to categories embedded in groups.
+    }
+  }
+
+  /// Create a custom factor, then reload so it appears in its category.
+  Future<void> createFactor({
+    required String categoryId,
+    required String name,
+    String kind = 'rating',
+    int? scaleMin,
+    int? scaleMax,
+    String? unit,
+    Map<String, String>? labels,
+  }) async {
+    if (state.mutating) return;
+    emit(state.copyWith(mutating: true, clearError: true));
+    try {
+      await _repo.createFactor(
+        categoryId: categoryId,
+        name: name,
+        kind: kind,
+        scaleMin: scaleMin,
+        scaleMax: scaleMax,
+        unit: unit,
+        labels: labels,
+      );
+      await load();
+      emit(state.copyWith(mutating: false, savedMessage: 'Фактор добавлен'));
+      emit(state.copyWith(clearSavedMessage: true));
+    } on ApiException catch (e) {
+      emit(state.copyWith(
+        mutating: false,
+        error: e.message,
+        unauthorized: e.isUnauthorized,
+      ));
+      emit(state.copyWith(clearError: true));
+    } catch (e) {
+      emit(state.copyWith(mutating: false, error: e.toString()));
+      emit(state.copyWith(clearError: true));
+    }
+  }
+
+  /// Soft-delete a factor, then reload.
+  Future<void> deleteFactor(String id) async {
+    if (state.mutating) return;
+    emit(state.copyWith(mutating: true, clearError: true));
+    try {
+      await _repo.deleteFactor(id);
+      await load();
+      emit(state.copyWith(mutating: false, savedMessage: 'Фактор удалён'));
+      emit(state.copyWith(clearSavedMessage: true));
+    } on ApiException catch (e) {
+      emit(state.copyWith(
+        mutating: false,
+        error: e.message,
+        unauthorized: e.isUnauthorized,
+      ));
+      emit(state.copyWith(clearError: true));
+    } catch (e) {
+      emit(state.copyWith(mutating: false, error: e.toString()));
+      emit(state.copyWith(clearError: true));
+    }
+  }
+
+  /// Create a category, refresh the picker list, and return its id (or null).
+  Future<String?> createCategory({
+    required String name,
+    String? emoji,
+  }) async {
+    if (state.mutating) return null;
+    emit(state.copyWith(mutating: true, clearError: true));
+    try {
+      final created = await _repo.createCategory(name: name, emoji: emoji);
+      await loadCategories();
+      emit(state.copyWith(mutating: false, savedMessage: 'Категория добавлена'));
+      emit(state.copyWith(clearSavedMessage: true));
+      return created.id;
+    } on ApiException catch (e) {
+      emit(state.copyWith(
+        mutating: false,
+        error: e.message,
+        unauthorized: e.isUnauthorized,
+      ));
+      emit(state.copyWith(clearError: true));
+      return null;
+    } catch (e) {
+      emit(state.copyWith(mutating: false, error: e.toString()));
+      emit(state.copyWith(clearError: true));
+      return null;
     }
   }
 }

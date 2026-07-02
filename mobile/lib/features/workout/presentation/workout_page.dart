@@ -236,7 +236,7 @@ class _Header extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Занятие ${plan.sessionIndex + 1}'
+                      'Занятие ${plan.sessionIndex}/10'
                       '${plan.routineName.isNotEmpty ? ' · ${plan.routineName}' : ''}',
                       style: const TextStyle(
                           color: AppColors.textSecondary, fontSize: 13),

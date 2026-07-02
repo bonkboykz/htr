@@ -27,6 +27,9 @@ class ProgramState extends Equatable {
   /// Routines whose composition is currently being fetched.
   final Set<String> loadingRoutines;
 
+  /// True while a create/update/delete mutation is in flight.
+  final bool mutating;
+
   final String? error;
   final bool unauthorized;
 
@@ -38,6 +41,7 @@ class ProgramState extends Equatable {
     this.expandedRoutines = const {},
     this.expandedSections = const {},
     this.loadingRoutines = const {},
+    this.mutating = false,
     this.error,
     this.unauthorized = false,
   });
@@ -50,6 +54,7 @@ class ProgramState extends Equatable {
     Set<String>? expandedRoutines,
     Set<String>? expandedSections,
     Set<String>? loadingRoutines,
+    bool? mutating,
     String? error,
     bool? unauthorized,
   }) {
@@ -61,6 +66,7 @@ class ProgramState extends Equatable {
       expandedRoutines: expandedRoutines ?? this.expandedRoutines,
       expandedSections: expandedSections ?? this.expandedSections,
       loadingRoutines: loadingRoutines ?? this.loadingRoutines,
+      mutating: mutating ?? this.mutating,
       error: error,
       unauthorized: unauthorized ?? this.unauthorized,
     );
@@ -68,6 +74,14 @@ class ProgramState extends Equatable {
 
   String exerciseName(String exerciseId) =>
       exercisesById[exerciseId]?.displayName ?? 'Упражнение';
+
+  /// Catalog as a list sorted by Russian display name (for the picker).
+  List<ProgramCatalogExercise> get catalog {
+    final list = exercisesById.values.toList();
+    list.sort((a, b) =>
+        a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    return list;
+  }
 
   @override
   List<Object?> get props => [
@@ -78,6 +92,7 @@ class ProgramState extends Equatable {
         expandedRoutines,
         expandedSections,
         loadingRoutines,
+        mutating,
         error,
         unauthorized,
       ];
@@ -172,5 +187,166 @@ class ProgramCubit extends Cubit<ProgramState> {
       next.add(key);
     }
     emit(state.copyWith(expandedSections: next));
+  }
+
+  // ---------- catalog ----------
+
+  /// Ensure the exercise catalog is loaded (used by the picker).
+  Future<void> loadCatalog() async {
+    if (state.exercisesById.isNotEmpty) return;
+    try {
+      final exercises = await _repo.exercisesById();
+      emit(state.copyWith(exercisesById: exercises));
+    } on ApiException catch (e) {
+      _emitError(e);
+    } catch (e) {
+      _emitError(e);
+    }
+  }
+
+  // ---------- mutations ----------
+
+  Future<void> createRoutine({required String nameRu, String? notes}) async {
+    await _mutate(() async {
+      final r = await _repo.createRoutine(
+        name: nameRu,
+        nameRu: nameRu,
+        notes: notes,
+      );
+      return {r.id};
+    });
+  }
+
+  Future<void> updateRoutine(
+    String id, {
+    required String nameRu,
+    String? notes,
+  }) async {
+    await _mutate(() async {
+      await _repo.updateRoutine(id, nameRu: nameRu, notes: notes ?? '');
+      return const <String>{};
+    });
+  }
+
+  Future<void> deleteRoutine(String id) async {
+    await _mutate(() async {
+      await _repo.deleteRoutine(id);
+      return const <String>{};
+    });
+  }
+
+  Future<void> addExercise(
+    String routineId, {
+    required String exerciseId,
+    required String section,
+    required int targetSets,
+    required int repMin,
+    required int repMax,
+    int? targetRir,
+  }) async {
+    await _mutate(() async {
+      await _repo.addExercise(
+        routineId,
+        exerciseId: exerciseId,
+        section: section,
+        targetSets: targetSets,
+        repMin: repMin,
+        repMax: repMax,
+        targetRir: targetRir,
+      );
+      return {routineId};
+    });
+  }
+
+  Future<void> updateExercise(
+    String routineId,
+    String reId, {
+    String? exerciseId,
+    String? section,
+    int? targetSets,
+    int? repMin,
+    int? repMax,
+    int? targetRir,
+  }) async {
+    await _mutate(() async {
+      await _repo.updateExercise(
+        routineId,
+        reId,
+        exerciseId: exerciseId,
+        section: section,
+        targetSets: targetSets,
+        repMin: repMin,
+        repMax: repMax,
+        targetRir: targetRir,
+      );
+      return {routineId};
+    });
+  }
+
+  Future<void> deleteExercise(String routineId, String reId) async {
+    await _mutate(() async {
+      await _repo.deleteExercise(routineId, reId);
+      return {routineId};
+    });
+  }
+
+  /// Runs [action] (which returns routine ids to keep expanded), then reloads.
+  Future<void> _mutate(Future<Set<String>> Function() action) async {
+    emit(state.copyWith(mutating: true, error: null));
+    try {
+      final expand = await action();
+      await _reload(expandRoutineIds: expand);
+    } on ApiException catch (e) {
+      _emitError(e);
+    } catch (e) {
+      _emitError(e);
+    }
+  }
+
+  /// Refetch routines + catalog, preserving (and optionally extending) the set
+  /// of expanded routines, and re-fetch their compositions.
+  Future<void> _reload({Set<String> expandRoutineIds = const {}}) async {
+    final routines = await _repo.routines();
+    final exercises = await _repo.exercisesById();
+    final existingIds = routines.map((r) => r.id).toSet();
+    final expanded = <String>{...state.expandedRoutines, ...expandRoutineIds}
+        .where(existingIds.contains)
+        .toSet();
+
+    final composition = <String, List<ProgramExercise>>{};
+    for (final id in expanded) {
+      composition[id] = await _repo.routineExercises(id);
+    }
+
+    final sections = state.expandedSections
+        .where((k) => expanded.contains(k.split('::').first))
+        .toSet();
+    for (final id in expandRoutineIds) {
+      if (existingIds.contains(id)) sections.add('$id::main');
+    }
+
+    emit(state.copyWith(
+      status: ProgramStatus.ready,
+      mutating: false,
+      routines: routines,
+      exercisesById: exercises,
+      composition: composition,
+      expandedRoutines: expanded,
+      expandedSections: sections,
+      loadingRoutines: const {},
+      error: null,
+    ));
+  }
+
+  void _emitError(Object e) {
+    if (e is ApiException) {
+      emit(state.copyWith(
+        mutating: false,
+        error: e.message,
+        unauthorized: e.isUnauthorized,
+      ));
+    } else {
+      emit(state.copyWith(mutating: false, error: e.toString()));
+    }
   }
 }

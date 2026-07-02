@@ -9,7 +9,49 @@ import '../../../core/network/api_client.dart';
 import '../cubit/factors_cubit.dart';
 import '../data/factors_models.dart';
 import '../data/factors_repository.dart';
+import 'widgets/add_factor_sheet.dart';
 import 'widgets/factor_controls.dart';
+
+/// Opens the "new factor" bottom sheet, wired to the current [FactorsCubit].
+Future<void> showAddFactorSheet(BuildContext context, {String? categoryId}) {
+  final cubit = context.read<FactorsCubit>();
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.card)),
+    ),
+    builder: (_) => BlocProvider.value(
+      value: cubit,
+      child: AddFactorSheet(defaultCategoryId: categoryId),
+    ),
+  );
+}
+
+/// Confirms then soft-deletes a factor via the cubit.
+Future<void> confirmDeleteFactor(BuildContext context, Factor factor) async {
+  final cubit = context.read<FactorsCubit>();
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Удалить фактор?'),
+      content: Text('«${factor.name}» будет удалён из списка.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Удалить'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) await cubit.deleteFactor(factor.id);
+}
 
 /// Full-screen route reached from Today (`/today/factors`).
 class FactorsPage extends StatelessWidget {
@@ -59,6 +101,15 @@ class _FactorsView extends StatelessWidget {
             ),
           ],
         ),
+        actions: [
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(LucideIcons.plus),
+              tooltip: 'Добавить фактор',
+              onPressed: () => showAddFactorSheet(context),
+            ),
+          ),
+        ],
       ),
       body: BlocConsumer<FactorsCubit, FactorsState>(
         listenWhen: (a, b) =>
@@ -149,13 +200,24 @@ class _Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.groups.isEmpty) {
-      return const Center(
+    if (state.groups.every((g) => g.factors.isEmpty)) {
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Факторы пока не заданы.',
-            style: TextStyle(color: AppColors.textSecondary),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Факторы пока не заданы.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => showAddFactorSheet(context),
+                icon: const Icon(LucideIcons.plus, size: 20),
+                label: const Text('Добавить фактор'),
+              ),
+            ],
           ),
         ),
       );
@@ -221,7 +283,22 @@ class _CategoryCard extends StatelessWidget {
             FactorRow(
               factor: f.factor,
               value: values[f.factor.id],
+              onDelete: () => confirmDeleteFactor(context, f.factor),
             ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () =>
+                  showAddFactorSheet(context, categoryId: group.category.id),
+              icon: const Icon(LucideIcons.plus, size: 18),
+              label: const Text('Добавить фактор'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.accent,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+            ),
+          ),
         ],
       ),
     );

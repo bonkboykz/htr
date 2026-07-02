@@ -80,9 +80,12 @@ class WeightTrend extends Equatable {
   });
 
   factory WeightTrend.fromJson(Map<String, dynamic> j) => WeightTrend(
-        entries: ((j['entries'] as List?) ?? const [])
+        // API returns entries newest-first; sort ascending so the chart reads
+        // oldest→newest left-to-right and `entries.last` is the current weight.
+        entries: (((j['entries'] as List?) ?? const [])
             .map((e) => WeightPoint.fromJson(e as Map<String, dynamic>))
-            .toList(),
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date))),
         trendGrams: (j['trendGrams'] as num?)?.toInt() ?? 0,
         trendFormatted: (j['trendFormatted'] ?? '').toString(),
         changeGrams: (j['changeGrams'] as num?)?.toInt() ?? 0,

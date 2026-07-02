@@ -12,50 +12,75 @@ import '../../data/factors_models.dart';
 class FactorRow extends StatelessWidget {
   final Factor factor;
   final int? value;
-  const FactorRow({super.key, required this.factor, this.value});
+
+  /// When non-null, a long-press or trailing overflow lets the user delete
+  /// this factor (the callback runs after its own confirm dialog).
+  final VoidCallback? onDelete;
+
+  const FactorRow({
+    super.key,
+    required this.factor,
+    this.value,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  factor.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+    return GestureDetector(
+      onLongPress: onDelete,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    factor.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              if (factor.isCount && factor.unit != null)
-                Text(
-                  '· ${factor.unit}',
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.textMuted),
-                )
-              else if (!factor.isCount && value != null)
-                Text(
-                  '$value',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.accent,
+                if (factor.isCount && factor.unit != null)
+                  Text(
+                    '· ${factor.unit}',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textMuted),
+                  )
+                else if (!factor.isCount && value != null)
+                  Text(
+                    '$value',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.accent,
+                    ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (factor.isCount)
-            _CountStepper(factor: factor, value: value ?? 0)
-          else
-            _RatingChips(factor: factor, value: value),
-        ],
+                if (onDelete != null)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                        minWidth: 32, minHeight: 32),
+                    splashRadius: 20,
+                    icon: const Icon(LucideIcons.trash2,
+                        size: 18, color: AppColors.textMuted),
+                    tooltip: 'Удалить фактор',
+                    onPressed: onDelete,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (factor.isCount)
+              _CountStepper(factor: factor, value: value ?? 0)
+            else
+              _RatingChips(factor: factor, value: value),
+          ],
+        ),
       ),
     );
   }
