@@ -1,7 +1,11 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import * as schema from "./schema.js";
+import * as coreSchema from "./schema.js";
+import * as trainingSchema from "../training/schema.js";
+
+// Merge core + training tables into a single schema namespace.
+const schema = { ...coreSchema, ...trainingSchema };
 
 export type DB = ReturnType<typeof createDb>;
 

@@ -198,3 +198,145 @@ export interface RangeStats {
   days: DayStats[];
   compliance: Compliance | null;
 }
+
+// ---------- Training domain ----------
+
+export interface Exercise {
+  id: string;
+  name: string;
+  nameRu: string;
+  muscleGroup: string;
+  pattern: string;
+  equipment: string; // JSON array string
+  isUnilateral: number;
+  isSafeLowerBack: number;
+  defaultRepMin: number;
+  defaultRepMax: number;
+  minIncrementG: number;
+  videoQuery: string | null;
+  cuesRu: string | null;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export interface Routine {
+  id: string;
+  name: string;
+  nameRu: string;
+  notes: string | null;
+  sortOrder: number;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export interface RoutineExercise {
+  id: string;
+  routineId: string;
+  exerciseId: string;
+  section: string; // warmup | main | reab
+  sortOrder: number;
+  targetSets: number;
+  repMin: number;
+  repMax: number;
+  targetRir: number;
+  isRampupScaled: number;
+  notes: string | null;
+  isDeleted: number;
+}
+
+export interface WorkoutSession {
+  id: string;
+  routineId: string;
+  sessionIndex: number;
+  startedAt: string;
+  endedAt: string | null;
+  notes: string | null;
+  isDeleted: number;
+}
+
+export interface SetRow {
+  id: string;
+  sessionId: string;
+  exerciseId: string;
+  setNumber: number;
+  weightG: number;
+  reps: number;
+  rir: number | null;
+  isWarmup: number;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export type ProgressionAction = "increase" | "hold" | "deload_or_hold" | "rampup";
+
+export interface ProgressionSuggestion {
+  exerciseId: string;
+  action: ProgressionAction;
+  weightG: number;
+  repsTarget: number | null;
+  rirTarget: number | null;
+  rationale: string;
+}
+
+export interface RoutinePlanItem {
+  routineExercise: RoutineExercise;
+  exercise: Exercise | null;
+  lastPerformance: SetRow[];
+  suggestion: ProgressionSuggestion | null;
+}
+
+export interface RoutinePlan {
+  routine: Routine;
+  sessionIndex: number;
+  isRampup: boolean;
+  sections: {
+    warmup: RoutinePlanItem[];
+    main: RoutinePlanItem[];
+    reab: RoutinePlanItem[];
+  };
+}
+
+export interface ProgressionPoint {
+  sessionId: string;
+  date: string; // YYYY-MM-DD of the session
+  weightG: number; // top working set weight
+  reps: number;
+  e1rmG: number; // Epley estimate
+}
+
+export interface ProgressionHistory {
+  exerciseId: string;
+  points: ProgressionPoint[];
+  currentE1rmG: number;
+  changeE1rmG: number; // vs first point
+}
+
+export interface VolumeGroupStat {
+  muscleGroup: string;
+  volumeG: number; // SUM(weight_g * reps)
+  sets: number;
+}
+
+export interface VolumeByGroup {
+  from: string | null;
+  to: string | null;
+  byGroup: VolumeGroupStat[];
+  totalVolumeG: number;
+}
+
+export interface SessionSummary {
+  id: string;
+  routineId: string;
+  routineName: string;
+  sessionIndex: number;
+  startedAt: string;
+  endedAt: string | null;
+  durationS: number | null;
+  totalSets: number; // working sets
+  totalVolumeG: number;
+}
+
+export interface TrainingRange {
+  from?: string; // YYYY-MM-DD inclusive
+  to?: string; // YYYY-MM-DD inclusive
+}

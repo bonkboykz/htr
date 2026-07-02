@@ -14,6 +14,8 @@ import { targetsRoutes } from "./routes/targets.js";
 import { statsRoutes } from "./routes/stats.js";
 import { profileRoutes } from "./routes/profile.js";
 import { goalsRoutes } from "./routes/goals.js";
+import { trainingRoutes } from "./routes/training.js";
+import { mcpRoutes } from "./mcp.js";
 
 export function createApp(db: DB) {
   const app = new Hono();
@@ -39,6 +41,10 @@ export function createApp(db: DB) {
   app.route("/api/v1/stats", statsRoutes(db));
   app.route("/api/v1/profile", profileRoutes(db));
   app.route("/api/v1/goals", goalsRoutes(db));
+  app.route("/api/v1/training", trainingRoutes(db));
+
+  // Remote MCP endpoint (token-gated, shares the same db). URL: /mcp/<HTR_API_KEY>
+  app.route("/mcp", mcpRoutes(db));
 
   // Global error handler
   app.onError((err, c) => {

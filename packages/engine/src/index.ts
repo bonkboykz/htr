@@ -1,6 +1,7 @@
 export { createDb, createAndMigrateDb, schema } from "./db/index.js";
 export type { DB } from "./db/index.js";
 export { seedMeals } from "./db/seed.js";
+export { seedTraining } from "./training/seed.js";
 export { newId } from "./id.js";
 export { setupTestDb } from "./test-helpers.js";
 
@@ -15,3 +16,6 @@ export * from "./sleep/engine.js";
 export * from "./stats/engine.js";
 export * from "./profile/engine.js";
 export * from "./goals/engine.js";
+export * from "./training/engine.js";
+export * from "./training/schemas.js";
+export * from "./training/calc.js";

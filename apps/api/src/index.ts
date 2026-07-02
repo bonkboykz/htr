@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { createAndMigrateDb, seedMeals } from "@htr/engine";
+import { createAndMigrateDb, seedMeals, seedTraining } from "@htr/engine";
 import { createApp } from "./app.js";
 
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -9,7 +9,8 @@ const db = createAndMigrateDb(dbPath);
 console.log("Migrations completed.");
 
 seedMeals(db);
-console.log("System meals seeded.");
+seedTraining(db);
+console.log("System meals and training program seeded.");
 
 const app = createApp(db);
 

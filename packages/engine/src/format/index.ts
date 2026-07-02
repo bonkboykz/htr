@@ -29,6 +29,13 @@ export function formatBodyFat(permille: number): string {
   return `${(permille / 10).toFixed(1)}%`;
 }
 
+export function formatVolume(gramReps: number): string {
+  if (gramReps >= 1_000_000) {
+    return `${(gramReps / 1_000_000).toFixed(1)} t`;
+  }
+  return `${Math.round(gramReps / 1000)} kg`;
+}
+
 export function formatProgress(current: number, target: number): number {
   if (target <= 0) return 0;
   return Math.min(100, Math.round((current / target) * 100));
