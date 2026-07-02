@@ -111,6 +111,7 @@ export const setLogs = sqliteTable(
     weightG: integer("weight_g").notNull(), // grams
     reps: integer("reps").notNull(),
     rir: integer("rir"), // nullable for warmups
+    durationS: integer("duration_s"), // seconds; set for static/timed work (plank, stretch)
     isWarmup: integer("is_warmup").notNull().default(0),
     isDeleted: integer("is_deleted").notNull().default(0),
     createdAt: text("created_at")

@@ -34,6 +34,7 @@ import {
   epley1RM,
   setVolumeG,
   roundToIncrement,
+  formatDuration,
   type DB,
 } from "../src/index.js";
 import { eq } from "drizzle-orm";
@@ -461,6 +462,71 @@ describe("training: soft-delete sets & sessions", () => {
     expect(getVolumeStats(db, {}).totalVolumeG).toBe(0);
     expect(getProgression(db, BENCH).points).toHaveLength(0);
     expect(getLastPerformance(db, BENCH)).toEqual([]);
+  });
+});
+
+describe("training: static / timed exercises (duration_s)", () => {
+  let db: DB;
+  const PLANK = "ex-plank"; // seeded core exercise
+  beforeEach(() => {
+    db = setupTestDb();
+  });
+
+  function plankSession(sessionIndex: number, holdS: number) {
+    const s = startSession(db, { routine_id: "routine-a", session_index: sessionIndex });
+    logSet(db, s.session_id, {
+      exercise_id: PLANK,
+      set_number: 1,
+      weight_g: 0,
+      reps: 0,
+      duration_s: holdS,
+      is_warmup: false,
+    });
+    endSession(db, s.session_id, {});
+    return s;
+  }
+
+  it("formatDuration control values", () => {
+    expect(formatDuration(45)).toBe("45s");
+    expect(formatDuration(90)).toBe("1m 30s");
+    expect(formatDuration(120)).toBe("2m");
+    expect(formatDuration(3661)).toBe("1h 1m 1s");
+  });
+
+  it("stores duration_s and returns it in last performance", () => {
+    plankSession(5, 40);
+    const perf = getLastPerformance(db, PLANK);
+    expect(perf).toHaveLength(1);
+    expect(perf[0].durationS).toBe(40);
+  });
+
+  it("getVolumeStats sums hold time and keeps weighted volume at 0", () => {
+    plankSession(5, 40);
+    const vol = getVolumeStats(db, {});
+    expect(vol.totalDurationS).toBe(40);
+    expect(vol.totalVolumeG).toBe(0); // bodyweight → no weighted volume
+    const core = vol.byGroup.find((g) => g.muscleGroup === "core");
+    expect(core?.durationS).toBe(40);
+    expect(core?.volumeG).toBe(0);
+  });
+
+  it("getProgression uses the duration metric for timed exercises", () => {
+    plankSession(5, 30);
+    plankSession(6, 45);
+    const prog = getProgression(db, PLANK);
+    expect(prog.metric).toBe("duration");
+    expect(prog.points.map((p) => p.durationS)).toEqual([30, 45]);
+    expect(prog.currentDurationS).toBe(45);
+    expect(prog.changeDurationS).toBe(15);
+    expect(prog.currentE1rmG).toBe(0); // no weight metric
+  });
+
+  it("weight-based exercises still use the e1RM metric", () => {
+    completedBenchSession(db, 5, [{ weight_g: 50000, reps: 10, rir: 2 }]);
+    const prog = getProgression(db, BENCH);
+    expect(prog.metric).toBe("weight");
+    expect(prog.currentE1rmG).toBe(epley1RM(50000, 10));
+    expect(prog.currentDurationS).toBe(0);
   });
 });
 

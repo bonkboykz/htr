@@ -36,6 +36,13 @@
       "when": 1782991162797,
       "tag": "0004_unknown_jackal",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782992231745,
+      "tag": "0005_parallel_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

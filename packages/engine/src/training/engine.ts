@@ -133,6 +133,7 @@ export function logSet(
       weightG: input.weight_g,
       reps: input.reps,
       rir: input.rir ?? null,
+      durationS: input.duration_s ?? null,
       isWarmup: input.is_warmup ? 1 : 0,
     })
     .run();
@@ -183,6 +184,7 @@ export function quickRepeatLastSet(
       weightG: previous.weightG,
       reps: previous.reps,
       rir: previous.rir,
+      durationS: previous.durationS,
       isWarmup: previous.isWarmup,
     })
     .run();
@@ -517,14 +519,25 @@ export function getProgression(
     )
     .all() as SetRow[];
 
-  // Group by session; take the top working set per session.
+  // Time-based exercise (plank, stretch) if its most recent working set has a duration.
+  const lastByTime = [...sets].sort((a, b) =>
+    a.createdAt < b.createdAt ? 1 : -1,
+  )[0];
+  const metric: "weight" | "duration" =
+    lastByTime && lastByTime.durationS != null ? "duration" : "weight";
+
+  // Group by session; take the best working set per session (heaviest, or longest hold).
   const bySession = new Map<string, SetRow>();
   for (const s of sets) {
     const meta = sessions.get(s.sessionId);
     if (!meta) continue; // orphan / deleted session
     if (!inRange(meta.startedAt, range)) continue;
     const cur = bySession.get(s.sessionId);
-    if (
+    if (metric === "duration") {
+      if (!cur || (s.durationS ?? 0) > (cur.durationS ?? 0)) {
+        bySession.set(s.sessionId, s);
+      }
+    } else if (
       !cur ||
       s.weightG > cur.weightG ||
       (s.weightG === cur.weightG && s.reps > cur.reps)
@@ -539,14 +552,35 @@ export function getProgression(
       date: (sessions.get(sessionId)?.startedAt ?? top.createdAt).slice(0, 10),
       weightG: top.weightG,
       reps: top.reps,
-      e1rmG: epley1RM(top.weightG, top.reps),
+      e1rmG: metric === "weight" ? epley1RM(top.weightG, top.reps) : 0,
+      durationS: metric === "duration" ? top.durationS ?? 0 : null,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const currentE1rmG = points.length ? points[points.length - 1].e1rmG : 0;
-  const changeE1rmG = points.length ? currentE1rmG - points[0].e1rmG : 0;
+  const currentE1rmG =
+    metric === "weight" && points.length
+      ? points[points.length - 1].e1rmG
+      : 0;
+  const changeE1rmG =
+    metric === "weight" && points.length ? currentE1rmG - points[0].e1rmG : 0;
+  const currentDurationS =
+    metric === "duration" && points.length
+      ? points[points.length - 1].durationS ?? 0
+      : 0;
+  const changeDurationS =
+    metric === "duration" && points.length
+      ? currentDurationS - (points[0].durationS ?? 0)
+      : 0;
 
-  return { exerciseId, points, currentE1rmG, changeE1rmG };
+  return {
+    exerciseId,
+    metric,
+    points,
+    currentE1rmG,
+    changeE1rmG,
+    currentDurationS,
+    changeDurationS,
+  };
 }
 
 export function getVolumeStats(db: DB, range: TrainingRange): VolumeByGroup {
@@ -568,30 +602,43 @@ export function getVolumeStats(db: DB, range: TrainingRange): VolumeByGroup {
     )
     .all() as SetRow[];
 
-  const acc = new Map<string, { volumeG: number; sets: number }>();
+  const acc = new Map<
+    string,
+    { volumeG: number; durationS: number; sets: number }
+  >();
   let total = 0;
+  let totalDuration = 0;
   for (const s of sets) {
     const meta = sessions.get(s.sessionId);
     if (!meta) continue;
     if (!inRange(meta.startedAt, range)) continue;
     const group = groupOf.get(s.exerciseId) ?? "unknown";
     const vol = setVolumeG(s.weightG, s.reps);
-    const cur = acc.get(group) ?? { volumeG: 0, sets: 0 };
+    const dur = s.durationS ?? 0;
+    const cur = acc.get(group) ?? { volumeG: 0, durationS: 0, sets: 0 };
     cur.volumeG += vol;
+    cur.durationS += dur;
     cur.sets += 1;
     acc.set(group, cur);
     total += vol;
+    totalDuration += dur;
   }
 
   const byGroup: VolumeGroupStat[] = [...acc.entries()]
-    .map(([muscleGroup, v]) => ({ muscleGroup, volumeG: v.volumeG, sets: v.sets }))
-    .sort((a, b) => b.volumeG - a.volumeG);
+    .map(([muscleGroup, v]) => ({
+      muscleGroup,
+      volumeG: v.volumeG,
+      durationS: v.durationS,
+      sets: v.sets,
+    }))
+    .sort((a, b) => b.volumeG - a.volumeG || b.durationS - a.durationS);
 
   return {
     from: range.from ?? null,
     to: range.to ?? null,
     byGroup,
     totalVolumeG: total,
+    totalDurationS: totalDuration,
   };
 }
 

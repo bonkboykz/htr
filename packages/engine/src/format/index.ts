@@ -36,6 +36,15 @@ export function formatVolume(gramReps: number): string {
   return `${Math.round(gramReps / 1000)} kg`;
 }
 
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : `${h}h ${m}m`;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
 export function formatProgress(current: number, target: number): number {
   if (target <= 0) return 0;
   return Math.min(100, Math.round((current / target) * 100));

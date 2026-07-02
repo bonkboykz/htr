@@ -262,6 +262,7 @@ export interface SetRow {
   weightG: number;
   reps: number;
   rir: number | null;
+  durationS: number | null; // seconds for static/timed sets (plank, stretch)
   isWarmup: number;
   isDeleted: number;
   createdAt: string;
@@ -301,19 +302,24 @@ export interface ProgressionPoint {
   date: string; // YYYY-MM-DD of the session
   weightG: number; // top working set weight
   reps: number;
-  e1rmG: number; // Epley estimate
+  e1rmG: number; // Epley estimate (0 for time-based work)
+  durationS: number | null; // best hold time for time-based exercises
 }
 
 export interface ProgressionHistory {
   exerciseId: string;
+  metric: "weight" | "duration"; // weight-based (e1RM) vs time-based (hold seconds)
   points: ProgressionPoint[];
   currentE1rmG: number;
-  changeE1rmG: number; // vs first point
+  changeE1rmG: number; // vs first point (weight metric)
+  currentDurationS: number; // best current hold (duration metric)
+  changeDurationS: number; // vs first point (duration metric)
 }
 
 export interface VolumeGroupStat {
   muscleGroup: string;
-  volumeG: number; // SUM(weight_g * reps)
+  volumeG: number; // SUM(weight_g * reps) — loaded work
+  durationS: number; // SUM(duration_s) — static/timed hold work
   sets: number;
 }
 
@@ -322,6 +328,7 @@ export interface VolumeByGroup {
   to: string | null;
   byGroup: VolumeGroupStat[];
   totalVolumeG: number;
+  totalDurationS: number;
 }
 
 export interface SessionSummary {

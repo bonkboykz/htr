@@ -18,6 +18,7 @@ export const LogSetInput = z.object({
   weight_g: z.number().int().nonnegative(), // grams
   reps: z.number().int().nonnegative(),
   rir: z.number().int().min(0).max(5).nullable().optional(),
+  duration_s: z.number().int().nonnegative().nullable().optional(), // seconds for static/timed work
   is_warmup: z.boolean().default(false),
 });
 

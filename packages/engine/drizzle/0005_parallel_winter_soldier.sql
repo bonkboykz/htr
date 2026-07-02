@@ -1,0 +1,1 @@
+ALTER TABLE `set_logs` ADD `duration_s` integer;

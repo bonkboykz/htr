@@ -42,6 +42,7 @@ import {
   RecordOverrideInput,
   formatWeight,
   formatVolume,
+  formatDuration,
   type DB,
   type TrainingRange,
 } from "@htr/engine";
@@ -189,10 +190,13 @@ export function trainingRoutes(db: DB) {
       ...history,
       currentE1rmFormatted: formatWeight(history.currentE1rmG),
       changeE1rmFormatted: formatWeight(history.changeE1rmG),
+      currentDurationFormatted: formatDuration(history.currentDurationS),
+      changeDurationFormatted: formatDuration(history.changeDurationS),
       points: history.points.map((p) => ({
         ...p,
         weightFormatted: formatWeight(p.weightG),
         e1rmFormatted: formatWeight(p.e1rmG),
+        durationFormatted: p.durationS != null ? formatDuration(p.durationS) : null,
       })),
     });
   });
@@ -203,9 +207,11 @@ export function trainingRoutes(db: DB) {
     return c.json({
       ...stats,
       totalVolumeFormatted: formatVolume(stats.totalVolumeG),
+      totalDurationFormatted: formatDuration(stats.totalDurationS),
       byGroup: stats.byGroup.map((g) => ({
         ...g,
         volumeFormatted: formatVolume(g.volumeG),
+        durationFormatted: formatDuration(g.durationS),
       })),
     });
   });
