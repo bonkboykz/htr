@@ -2,11 +2,13 @@
 name: htr-health
 description: >
   Health tracking via REST API. Track calories, macros, weight, water intake,
-  sleep, daily targets, streaks, TDEE calculation and weight goals. Use when
-  user asks about food logging, калории, макросы, "сколько съел", weight
-  tracking, вес, water intake, вода, sleep tracking, сон, nutrition goals,
-  КБЖУ, TDEE, "сколько калорий нужно", цель по весу.
-version: 0.3.0
+  sleep, daily targets, streaks, TDEE calculation, weight goals and strength
+  training (workouts, sets, progression). Use when user asks about food logging,
+  калории, макросы, "сколько съел", weight tracking, вес, water intake, вода,
+  sleep tracking, сон, nutrition goals, КБЖУ, TDEE, "сколько калорий нужно",
+  цель по весу, тренировки, workout, подходы, прогрессия, жим, объём, e1RM,
+  "начни тренировку", "запиши подход".
+version: 0.4.0
 metadata:
   openclaw:
     emoji: "🏋️"
@@ -379,6 +381,132 @@ curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/goals/weight/{id}" | jq
 
 ---
 
+## Training (Workouts)
+
+Strength training: sessions, sets, and deterministic double-progression.
+Seeded program A/B — routines `routine-a` / `routine-b`, exercises `ex-<key>`
+(e.g. `ex-bench_press`, `ex-leg_press`). Weight in **grams** (52.5 kg = `52500`).
+
+### What's on today (A/B rotation + ramp-up)
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/today" | jq
+```
+
+Returns `{ routine_id, session_index, is_rampup }`. Ramp-up = first 3 sessions of a block.
+
+### Full workout screen (plan + last performance + suggestion)
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/routines/routine-a/plan?sessionIndex=6" | jq
+```
+
+Each main exercise carries `lastPerformance` (prior working sets) and a `suggestion`
+(`increase` / `hold` / `deload_or_hold` / `rampup`) with target weight & reps.
+
+### Start a session
+
+```bash
+curl -s -X POST "$HTR_API_URL/api/v1/training/sessions" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"routine_id": "routine-a"}' | jq
+```
+
+`session_index` is derived if omitted. Returns `{ session_id, session_index }`.
+
+### Log a set
+
+```bash
+curl -s -X POST "$HTR_API_URL/api/v1/training/sessions/{session_id}/sets" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{
+    "exercise_id": "ex-bench_press",
+    "set_number": 1,
+    "weight_g": 52500,
+    "reps": 10,
+    "rir": 2
+  }' | jq
+```
+
+`weight_g` in **grams**. `rir` (0-5) optional. `is_warmup` defaults to `false`.
+
+### Quick-repeat the last set
+
+```bash
+curl -s -X POST "$HTR_API_URL/api/v1/training/sessions/{session_id}/sets/quick" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"exercise_id": "ex-bench_press"}' | jq
+```
+
+### End a session
+
+```bash
+curl -s -X PATCH "$HTR_API_URL/api/v1/training/sessions/{session_id}" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"notes": "good session"}' | jq
+```
+
+Returns `{ duration_s }`. `ended_at` defaults to now.
+
+### Progression history (e1RM trend)
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/progression/ex-bench_press?range=month" | jq
+```
+
+`range=week|month`, or `?from=YYYY-MM-DD&to=YYYY-MM-DD`, or omit for all-time.
+Uses Epley e1RM = `weight_g * (1 + reps/30)`.
+
+### Volume by muscle group
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/stats/volume?range=week" | jq
+```
+
+### Session history
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/sessions?range=month" | jq
+```
+
+### Edit a routine exercise (persistent plan change)
+
+```bash
+curl -s -X PATCH "$HTR_API_URL/api/v1/training/routines/routine-a/exercises/{reId}" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"target_sets": 4, "rep_max": 12}' | jq
+```
+
+Fields: `exercise_id`, `target_sets`, `rep_min`, `rep_max`, `target_rir`, `notes` (all optional).
+
+### Override the suggested weight (advisory)
+
+```bash
+curl -s -X POST "$HTR_API_URL/api/v1/training/progression/ex-bench_press/override" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"exercise_id": "ex-bench_press", "weight_g": 50000, "reason": "недосып + дефицит"}' | jq
+```
+
+Advisory in v1 (not persisted): returns the engine's `suggestion` + your `override`.
+It is realized when you log the set at that weight.
+
+---
+
+## MCP (AI clients / Claude Desktop)
+
+The same engine is exposed as **17 typed MCP tools** (`@htr/mcp`) for AI clients.
+In production the MCP is served by the `api` service at `POST /mcp/<HTR_API_KEY>`
+(streamable-http, same database). Connect from Claude Desktop via **Settings →
+Connectors → Add custom connector** with URL `$HTR_API_URL/mcp/<HTR_API_KEY>`.
+
+Tools by tier: **READ** (`get_daily_summary`, `get_weight_trend`, `get_progression`,
+`get_volume_stats`, `list_sessions`, `get_routine_plan`, `get_today`, `get_tdee`),
+**WRITE** (`log_food`, `log_weight`, `log_sleep`, `log_water`), **WRITE_TRAINING**
+(`start_session`, `log_set`, `end_session`), **SENSITIVE** (`patch_routine_exercise`,
+`override_progression`). See `docs/section-7-training-and-mcp.md` for full details.
+
+---
+
 ## Units Convention
 
 All values stored as **integers** to avoid floating-point errors:
@@ -452,3 +580,24 @@ Response fields include both raw and formatted variants:
 
 ### "Насколько я дисциплинирован?" / "Compliance за неделю"
 1. `GET /api/v1/stats/range?from=2026-03-03&to=2026-03-09` → `compliance` object with rates per metric
+
+### "Начни тренировку A"
+1. `GET /api/v1/training/today` → confirm routine + session_index
+2. `POST /api/v1/training/sessions` → `{ session_id }`
+3. `GET /api/v1/training/routines/routine-a/plan?sessionIndex=` → показать план + подсказки
+
+### "Запиши жим 52.5 на 10, 10, 9"
+1. `POST /api/v1/training/sessions/{id}/sets` × N (weight_g=52500, reps 10/10/9)
+
+### "Как идёт жим за месяц?"
+1. `GET /api/v1/training/progression/ex-bench_press?range=month` → тренд e1RM
+
+### "Объём за неделю по группам мышц"
+1. `GET /api/v1/training/stats/volume?range=week` → `byGroup`
+
+### "Заверши тренировку"
+1. `PATCH /api/v1/training/sessions/{id}` → `{ duration_s }`
+
+### "Собери программу на месяц" (через MCP / Claude Desktop)
+1. `get_progression`, `get_volume_stats`, `list_sessions`, `get_weight_trend`, `get_tdee` → собрать контекст
+2. Предложить прогрессию; точечные правки шаблона — `patch_routine_exercise`

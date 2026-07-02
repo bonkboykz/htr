@@ -535,6 +535,7 @@ Commands:
 - `docs/section-4-rest-api.md` — REST API routes, Zod schemas, responses
 - `docs/section-5-assembly.md` — Build prompts, OpenClaw skill, deploy
 - `docs/section-6-factors-correlations.md` — Factors & correlations spec (future)
+- `docs/section-7-training-and-mcp.md` — Training domain REST API + MCP server (implemented)
 
 ## Build Order
 
