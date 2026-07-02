@@ -8,7 +8,7 @@ description: >
   sleep tracking, сон, nutrition goals, КБЖУ, TDEE, "сколько калорий нужно",
   цель по весу, тренировки, workout, подходы, прогрессия, жим, объём, e1RM,
   "начни тренировку", "запиши подход".
-version: 0.4.0
+version: 0.5.0
 metadata:
   openclaw:
     emoji: "🏋️"
@@ -490,20 +490,59 @@ curl -s -X POST "$HTR_API_URL/api/v1/training/progression/ex-bench_press/overrid
 Advisory in v1 (not persisted): returns the engine's `suggestion` + your `override`.
 It is realized when you log the set at that weight.
 
+### Authoring a program (CRUD)
+
+Build/edit the whole program — custom exercises, routines and their composition.
+
+```bash
+# Exercises
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/exercises?q=press&muscleGroup=chest" | jq
+curl -s -X POST "$HTR_API_URL/api/v1/training/exercises" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"name":"Incline DB Press","name_ru":"Жим гантелей в наклоне","muscle_group":"chest","pattern":"h_press","equipment":["db","bench"],"min_increment_g":2500}' | jq
+curl -s -X PATCH "$HTR_API_URL/api/v1/training/exercises/{id}" -H "$AUTH" -H "Content-Type: application/json" -d '{"cues_ru":"локти 45°"}' | jq
+curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/training/exercises/{id}" | jq
+
+# Routines + composition
+curl -s -X POST "$HTR_API_URL/api/v1/training/routines" -H "$AUTH" -H "Content-Type: application/json" -d '{"name":"Workout C","name_ru":"Тренировка C","notes":"push"}' | jq
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/routines/{routineId}/exercises" | jq
+curl -s -X POST "$HTR_API_URL/api/v1/training/routines/{routineId}/exercises" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"exercise_id":"ex-bench_press","section":"main","target_sets":3,"rep_min":8,"rep_max":10,"target_rir":2}' | jq
+curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/training/routines/{routineId}/exercises/{reId}" | jq
+curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/training/routines/{routineId}" | jq
+```
+
+### Delete logs & record deviations
+
+```bash
+# Soft-delete a mislogged set or a whole session
+curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/training/sessions/{sid}/sets/{setId}" | jq
+curl -s -X DELETE -H "$AUTH" "$HTR_API_URL/api/v1/training/sessions/{sid}" | jq
+
+# Record a substitution + read adherence ("how often I deviate")
+curl -s -X POST "$HTR_API_URL/api/v1/training/sessions/{sid}/overrides" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"routine_exercise_id":"{reId}","replaced_exercise_id":"ex-pec_deck","reason":"скамья занята"}' | jq
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/stats/adherence?range=month" | jq
+```
+
 ---
 
 ## MCP (AI clients / Claude Desktop)
 
-The same engine is exposed as **17 typed MCP tools** (`@htr/mcp`) for AI clients.
+The same engine is exposed as **34 typed MCP tools** (`@htr/mcp`) for AI clients,
+including full program authoring (create/edit exercises, routines, composition).
 In production the MCP is served by the `api` service at `POST /mcp/<HTR_API_KEY>`
 (streamable-http, same database). Connect from Claude Desktop via **Settings →
 Connectors → Add custom connector** with URL `$HTR_API_URL/mcp/<HTR_API_KEY>`.
 
-Tools by tier: **READ** (`get_daily_summary`, `get_weight_trend`, `get_progression`,
-`get_volume_stats`, `list_sessions`, `get_routine_plan`, `get_today`, `get_tdee`),
-**WRITE** (`log_food`, `log_weight`, `log_sleep`, `log_water`), **WRITE_TRAINING**
-(`start_session`, `log_set`, `end_session`), **SENSITIVE** (`patch_routine_exercise`,
-`override_progression`). See `docs/section-7-training-and-mcp.md` for full details.
+Tiers: **READ** (summaries, trends, progression, volume, sessions, plan, exercise/routine
+catalog, overrides, adherence), **WRITE** (`log_food/weight/sleep/water`), **WRITE_TRAINING**
+(`start_session`, `log_set`, `end_session`, `delete_set`, `delete_session`, `record_override`),
+**SENSITIVE** (`patch_routine_exercise`, `override_progression`, and authoring:
+`create/update/delete_exercise`, `create/update/delete_routine`, `add/delete_routine_exercise`).
+See `docs/section-7-training-and-mcp.md` for full details.
 
 ---
 

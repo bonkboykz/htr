@@ -80,6 +80,26 @@ export const workoutSessions = sqliteTable(
   ],
 );
 
+// One-off substitution/override recorded against a session (v2).
+// e.g. "bench was taken → did dumbbell press instead" or an AI weight override.
+export const sessionPlanOverrides = sqliteTable(
+  "session_plan_overrides",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    routineExerciseId: text("routine_exercise_id").notNull(),
+    replacedExerciseId: text("replaced_exercise_id").notNull(),
+    reason: text("reason"),
+    isDeleted: integer("is_deleted").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (t) => [
+    index("session_plan_overrides_session_idx").on(t.sessionId),
+  ],
+);
+
 // Core of progression: individual sets.
 export const setLogs = sqliteTable(
   "set_logs",

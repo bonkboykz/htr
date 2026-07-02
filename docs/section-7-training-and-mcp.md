@@ -90,8 +90,39 @@ ramp-up (session_index ≤ 3):     action="rampup",  вес ≈ 65% рабоче
 ### Правки плана
 | Метод | Путь | Назначение |
 |-------|------|------------|
-| `PATCH` | `/routines/:id/exercises/:reId` | сменить упражнение / сеты / диапазон / RIR (постоянно) |
+| `PATCH` | `/routines/:id/exercises/:reId` | сменить упражнение / секцию / порядок / сеты / диапазон / RIR |
 | `POST`  | `/progression/:exerciseId/override` | AI-override (advisory): возвращает `engineSuggestion` + `override` |
+
+### Авторинг программ (CRUD)
+Полноценное создание/редактирование программы (для чата/AI — планирование на месяц).
+
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| `GET`    | `/exercises?q=&muscleGroup=&includeDeleted=` | каталог упражнений |
+| `GET`    | `/exercises/:id` | упражнение по id (404 если удалено) |
+| `POST`   | `/exercises` | создать упражнение |
+| `PATCH`  | `/exercises/:id` | изменить упражнение |
+| `DELETE` | `/exercises/:id` | soft-delete упражнения |
+| `GET`    | `/routines` | список рутин |
+| `POST`   | `/routines` | создать рутину |
+| `PATCH`  | `/routines/:id` | изменить рутину |
+| `DELETE` | `/routines/:id` | soft-delete рутины (каскадно и её позиции) |
+| `GET`    | `/routines/:id/exercises` | позиции рутины |
+| `POST`   | `/routines/:id/exercises` | добавить позицию |
+| `DELETE` | `/routines/:id/exercises/:reId` | удалить позицию |
+
+### Удаление логов (soft delete)
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| `DELETE` | `/sessions/:id` | soft-delete сессии (и её сетов — исключаются из аналитики) |
+| `DELETE` | `/sessions/:sid/sets/:setId` | soft-delete одного подхода |
+
+### Overrides / отклонения от плана (v2)
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| `POST` | `/sessions/:id/overrides` | записать замену (`{ routine_exercise_id, replaced_exercise_id, reason? }`) |
+| `GET`  | `/sessions/:id/overrides` | замены в рамках сессии |
+| `GET`  | `/stats/adherence?range=` | «как часто отклоняюсь»: `totalOverrides` + разбивка |
 
 ### Примеры
 
@@ -125,8 +156,8 @@ curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/progression/ex-bench_press?rang
 
 ## 5. MCP-сервер (`@htr/mcp`)
 
-Оборачивает `@htr/engine` в типизированные MCP-инструменты. Работает с той же БД
-напрямую (свой инстанс `db`), а не через REST.
+Оборачивает `@htr/engine` в **34 типизированных MCP-инструмента**. Работает с той же
+БД напрямую (свой инстанс `db`), а не через REST.
 
 ### Транспорты
 - **stdio** (по умолчанию): `MCP_TRANSPORT` не задан → `apps/mcp/src/index.ts`.
@@ -134,26 +165,30 @@ curl -s -H "$AUTH" "$HTR_API_URL/api/v1/training/progression/ex-bench_press?rang
 - **Remote-эндпоинт в проде:** встроен в сервис `api` — `POST /mcp/:token`
   (`token = HTR_API_KEY`), делит ту же БД на volume `/data`. Используется Claude Desktop.
 
-### Инструменты (17) по уровням доступа
+### Инструменты (34) по уровням доступа
 
 **READ (свободно):**
 `get_daily_summary {date}`, `get_weight_trend {days?}`, `get_progression {exercise_id, from?, to?}`,
 `get_volume_stats {from?, to?, range?}`, `list_sessions {from?, to?, range?}`,
-`get_routine_plan {routine_id, session_index?}`, `get_today {}`, `get_tdee {date?}`.
+`get_routine_plan {routine_id, session_index?}`, `get_today {}`, `get_tdee {date?}`,
+`list_exercises {q?, muscle_group?, include_deleted?}`, `get_exercise {id}`, `list_routines {}`,
+`list_routine_exercises {routine_id}`, `list_overrides {session_id?}`, `get_plan_deviation {from?, to?, range?}`.
 
 **WRITE (питание/тело):**
-`log_food {date, mealId, foodItemId, servingGrams}`,
-`log_weight {date, weightGrams, bodyFat?, note?}`,
-`log_sleep {startTime, endTime, quality?, note?}`, `log_water {date, amountMl}`.
+`log_food`, `log_weight`, `log_sleep`, `log_water`.
 
 **WRITE (тренировки):**
-`start_session {routine_id, session_index?}`,
-`log_set {session_id, exercise_id, set_number, weight_g, reps, rir?, is_warmup?}`,
-`end_session {session_id, ended_at?, notes?}`.
+`start_session`, `log_set`, `end_session`, `delete_set {set_id}`, `delete_session {session_id}`,
+`record_override {session_id, routine_exercise_id, replaced_exercise_id, reason?}`.
 
-**SENSITIVE (постоянные правки плана):**
-`patch_routine_exercise {routine_exercise_id, exercise_id?, target_sets?, rep_min?, rep_max?, target_rir?, notes?}`,
-`override_progression {exercise_id, weight_g, reason}` (advisory).
+**SENSITIVE (постоянные правки плана / авторинг программ):**
+`patch_routine_exercise`, `override_progression` (advisory),
+`create_exercise`, `update_exercise {id, …}`, `delete_exercise {id}`,
+`create_routine`, `update_routine {id, …}`, `delete_routine {id}`,
+`add_routine_exercise {routine_id, …}`, `delete_routine_exercise {routine_exercise_id}`.
+
+> Авторинг (`create_*`/`add_*`/`update_*`) позволяет Claude **собирать программу целиком**
+> в БД (кастомные упражнения, новые рутины, состав), а не только править существующее.
 
 ### Подключение Claude Desktop (remote)
 

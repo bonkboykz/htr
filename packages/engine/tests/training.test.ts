@@ -14,6 +14,23 @@ import {
   getProgression,
   getVolumeStats,
   listSessions,
+  createExercise,
+  updateExercise,
+  deleteExercise,
+  listExercises,
+  getExerciseById,
+  createRoutine,
+  updateRoutine,
+  deleteRoutine,
+  listRoutines,
+  addRoutineExercise,
+  deleteRoutineExercise,
+  listRoutineExercises,
+  deleteSet,
+  deleteSession,
+  recordOverride,
+  listOverrides,
+  getPlanDeviation,
   epley1RM,
   setVolumeG,
   roundToIncrement,
@@ -314,5 +331,164 @@ describe("training: session lifecycle & analytics", () => {
     expect(sessions[0].totalSets).toBe(2);
     expect(sessions[0].totalVolumeG).toBe(1000000);
     expect(sessions[0].routineName).toBe("Workout A");
+  });
+});
+
+describe("training: exercise CRUD", () => {
+  let db: DB;
+  beforeEach(() => {
+    db = setupTestDb();
+  });
+
+  it("creates, reads, searches, updates and soft-deletes an exercise", () => {
+    const created = createExercise(db, {
+      name: "Cable Crossover",
+      name_ru: "Кроссовер",
+      muscle_group: "chest",
+      pattern: "isolation",
+      equipment: ["cable"],
+      is_unilateral: false,
+      is_safe_lower_back: false,
+      default_rep_min: 12,
+      default_rep_max: 15,
+      min_increment_g: 2500,
+    });
+    expect(created.id).toBeTruthy();
+    expect(JSON.parse(created.equipment)).toEqual(["cable"]);
+
+    expect(getExerciseById(db, created.id)?.name).toBe("Cable Crossover");
+    expect(listExercises(db, { q: "кроссовер" }).map((e) => e.id)).toContain(created.id);
+    expect(listExercises(db, { muscleGroup: "chest" }).some((e) => e.id === created.id)).toBe(true);
+
+    const updated = updateExercise(db, created.id, { min_increment_g: 5000, name_ru: "Сведение" });
+    expect(updated.minIncrementG).toBe(5000);
+    expect(updated.nameRu).toBe("Сведение");
+    expect(updated.name).toBe("Cable Crossover"); // unchanged
+
+    deleteExercise(db, created.id);
+    expect(listExercises(db).some((e) => e.id === created.id)).toBe(false);
+    expect(listExercises(db, { includeDeleted: true }).some((e) => e.id === created.id)).toBe(true);
+  });
+});
+
+describe("training: routine + composition CRUD", () => {
+  let db: DB;
+  beforeEach(() => {
+    db = setupTestDb();
+  });
+
+  it("creates a routine, adds/reorders positions, and cascade-deletes", () => {
+    const r = createRoutine(db, { name: "Workout C", name_ru: "Тренировка C", notes: "push" });
+    expect(r.sortOrder).toBe(3); // after seeded A(1) + B(2)
+
+    const p1 = addRoutineExercise(db, r.id, {
+      exercise_id: "ex-bench_press",
+      section: "main",
+      target_sets: 3,
+      rep_min: 8,
+      rep_max: 10,
+      target_rir: 2,
+    });
+    const p2 = addRoutineExercise(db, r.id, {
+      exercise_id: "ex-pec_deck",
+      section: "main",
+      target_sets: 2,
+      rep_min: 12,
+      rep_max: 15,
+      target_rir: 2,
+    });
+    expect(p1.sortOrder).toBe(1);
+    expect(p2.sortOrder).toBe(2); // appended
+
+    expect(listRoutineExercises(db, r.id)).toHaveLength(2);
+
+    const updated = updateRoutine(db, r.id, { notes: "push day" });
+    expect(updated.notes).toBe("push day");
+
+    deleteRoutineExercise(db, p1.id);
+    expect(listRoutineExercises(db, r.id).map((x) => x.id)).toEqual([p2.id]);
+
+    deleteRoutine(db, r.id);
+    expect(listRoutines(db).some((x) => x.id === r.id)).toBe(false);
+    expect(listRoutineExercises(db, r.id)).toHaveLength(0); // positions cascade-deleted
+  });
+
+  it("patchRoutineExercise can move section, reorder and toggle ramp-up", () => {
+    const r = createRoutine(db, { name: "Tmp", name_ru: "Врем" });
+    const p = addRoutineExercise(db, r.id, {
+      exercise_id: "ex-bench_press",
+      section: "main",
+      target_sets: 3,
+      rep_min: 8,
+      rep_max: 10,
+      target_rir: 2,
+    });
+    const patched = patchRoutineExercise(db, p.id, {
+      section: "reab",
+      sort_order: 9,
+      is_rampup_scaled: false,
+    });
+    expect(patched.section).toBe("reab");
+    expect(patched.sortOrder).toBe(9);
+    expect(patched.isRampupScaled).toBe(0);
+  });
+});
+
+describe("training: soft-delete sets & sessions", () => {
+  let db: DB;
+  beforeEach(() => {
+    db = setupTestDb();
+  });
+
+  it("deleteSet removes a set from performance and volume", () => {
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    const a = logSet(db, s.session_id, { exercise_id: BENCH, set_number: 1, weight_g: 50000, reps: 10, rir: 2, is_warmup: false });
+    logSet(db, s.session_id, { exercise_id: BENCH, set_number: 2, weight_g: 50000, reps: 9, rir: 1, is_warmup: false });
+    endSession(db, s.session_id, {});
+
+    deleteSet(db, a.set_id);
+    expect(getLastPerformance(db, BENCH).map((x) => x.reps)).toEqual([9]);
+    expect(getVolumeStats(db, {}).totalVolumeG).toBe(50000 * 9);
+  });
+
+  it("deleteSession excludes it and its sets from all analytics", () => {
+    const s = completedBenchSession(db, 5, [
+      { weight_g: 50000, reps: 10, rir: 2 },
+      { weight_g: 50000, reps: 10, rir: 2 },
+    ]);
+    deleteSession(db, s.session_id);
+    expect(listSessions(db)).toHaveLength(0);
+    expect(getVolumeStats(db, {}).totalVolumeG).toBe(0);
+    expect(getProgression(db, BENCH).points).toHaveLength(0);
+    expect(getLastPerformance(db, BENCH)).toEqual([]);
+  });
+});
+
+describe("training: session plan overrides", () => {
+  let db: DB;
+  beforeEach(() => {
+    db = setupTestDb();
+  });
+
+  it("records overrides, lists per session, and reports deviation", () => {
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    const re = listRoutineExercises(db, "routine-a").find((x) => x.exerciseId === BENCH)!;
+    const o = recordOverride(db, s.session_id, {
+      routine_exercise_id: re.id,
+      replaced_exercise_id: "ex-pec_deck",
+      reason: "скамья занята",
+    });
+    expect(o.reason).toBe("скамья занята");
+
+    expect(listOverrides(db, s.session_id)).toHaveLength(1);
+    expect(listOverrides(db)).toHaveLength(1);
+
+    const dev = getPlanDeviation(db);
+    expect(dev.totalOverrides).toBe(1);
+    expect(dev.byRoutineExercise[0]).toMatchObject({
+      routineExerciseId: re.id,
+      replacedExerciseId: "ex-pec_deck",
+      count: 1,
+    });
   });
 });

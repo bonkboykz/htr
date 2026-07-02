@@ -18,11 +18,18 @@ import type {
   SessionSummary,
   TrainingRange,
 } from "../types.js";
+import type { SessionPlanOverride, PlanDeviation } from "../types.js";
 import type {
   StartSessionInputT,
   LogSetInputT,
   EndSessionInputT,
   PatchRoutineExerciseInputT,
+  CreateExerciseInputT,
+  UpdateExerciseInputT,
+  CreateRoutineInputT,
+  UpdateRoutineInputT,
+  AddRoutineExerciseInputT,
+  RecordOverrideInputT,
 } from "./schemas.js";
 import { epley1RM, setVolumeG, roundToIncrement } from "./calc.js";
 
@@ -426,10 +433,14 @@ export function patchRoutineExercise(
 
   const updates: Partial<RoutineExercise> = {};
   if (input.exercise_id !== undefined) updates.exerciseId = input.exercise_id;
+  if (input.section !== undefined) updates.section = input.section;
+  if (input.sort_order !== undefined) updates.sortOrder = input.sort_order;
   if (input.target_sets !== undefined) updates.targetSets = input.target_sets;
   if (input.rep_min !== undefined) updates.repMin = input.rep_min;
   if (input.rep_max !== undefined) updates.repMax = input.rep_max;
   if (input.target_rir !== undefined) updates.targetRir = input.target_rir;
+  if (input.is_rampup_scaled !== undefined)
+    updates.isRampupScaled = input.is_rampup_scaled ? 1 : 0;
   if (input.notes !== undefined) updates.notes = input.notes;
 
   if (Object.keys(updates).length > 0) {
@@ -642,4 +653,352 @@ export function listSessions(
     });
   }
   return result;
+}
+
+// ---------- catalog reads ----------
+
+export function getExerciseById(db: DB, id: string): Exercise | null {
+  return getExercise(db, id);
+}
+
+export function listExercises(
+  db: DB,
+  opts?: { q?: string; muscleGroup?: string; includeDeleted?: boolean },
+): Exercise[] {
+  let rows = db.select().from(schema.exercises).all() as Exercise[];
+  if (!opts?.includeDeleted) rows = rows.filter((e) => e.isDeleted === 0);
+  if (opts?.muscleGroup)
+    rows = rows.filter((e) => e.muscleGroup === opts.muscleGroup);
+  if (opts?.q) {
+    const q = opts.q.toLowerCase();
+    rows = rows.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.nameRu.toLowerCase().includes(q),
+    );
+  }
+  return rows;
+}
+
+export function listRoutines(db: DB, includeDeleted = false): Routine[] {
+  const rows = db
+    .select()
+    .from(schema.routines)
+    .orderBy(asc(schema.routines.sortOrder))
+    .all() as Routine[];
+  return includeDeleted ? rows : rows.filter((r) => r.isDeleted === 0);
+}
+
+export function listRoutineExercises(
+  db: DB,
+  routineId: string,
+): RoutineExercise[] {
+  return db
+    .select()
+    .from(schema.routineExercises)
+    .where(
+      and(
+        eq(schema.routineExercises.routineId, routineId),
+        eq(schema.routineExercises.isDeleted, 0),
+      ),
+    )
+    .orderBy(
+      asc(schema.routineExercises.section),
+      asc(schema.routineExercises.sortOrder),
+    )
+    .all() as RoutineExercise[];
+}
+
+// ---------- exercise CRUD ----------
+
+export function createExercise(db: DB, input: CreateExerciseInputT): Exercise {
+  const id = newId();
+  db.insert(schema.exercises)
+    .values({
+      id,
+      name: input.name,
+      nameRu: input.name_ru,
+      muscleGroup: input.muscle_group,
+      pattern: input.pattern,
+      equipment: JSON.stringify(input.equipment ?? []),
+      isUnilateral: input.is_unilateral ? 1 : 0,
+      isSafeLowerBack: input.is_safe_lower_back ? 1 : 0,
+      defaultRepMin: input.default_rep_min,
+      defaultRepMax: input.default_rep_max,
+      minIncrementG: input.min_increment_g,
+      videoQuery: input.video_query ?? null,
+      cuesRu: input.cues_ru ?? null,
+    })
+    .run();
+  return getExercise(db, id) as Exercise;
+}
+
+export function updateExercise(
+  db: DB,
+  id: string,
+  input: UpdateExerciseInputT,
+): Exercise {
+  const existing = getExercise(db, id);
+  if (!existing || existing.isDeleted) {
+    throw new Error("Exercise not found");
+  }
+  const updates: Partial<Exercise> = {};
+  if (input.name !== undefined) updates.name = input.name;
+  if (input.name_ru !== undefined) updates.nameRu = input.name_ru;
+  if (input.muscle_group !== undefined) updates.muscleGroup = input.muscle_group;
+  if (input.pattern !== undefined) updates.pattern = input.pattern;
+  if (input.equipment !== undefined)
+    updates.equipment = JSON.stringify(input.equipment);
+  if (input.is_unilateral !== undefined)
+    updates.isUnilateral = input.is_unilateral ? 1 : 0;
+  if (input.is_safe_lower_back !== undefined)
+    updates.isSafeLowerBack = input.is_safe_lower_back ? 1 : 0;
+  if (input.default_rep_min !== undefined)
+    updates.defaultRepMin = input.default_rep_min;
+  if (input.default_rep_max !== undefined)
+    updates.defaultRepMax = input.default_rep_max;
+  if (input.min_increment_g !== undefined)
+    updates.minIncrementG = input.min_increment_g;
+  if (input.video_query !== undefined) updates.videoQuery = input.video_query;
+  if (input.cues_ru !== undefined) updates.cuesRu = input.cues_ru;
+
+  if (Object.keys(updates).length > 0) {
+    db.update(schema.exercises)
+      .set(updates)
+      .where(eq(schema.exercises.id, id))
+      .run();
+  }
+  return getExercise(db, id) as Exercise;
+}
+
+export function deleteExercise(db: DB, id: string): void {
+  db.update(schema.exercises)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.exercises.id, id))
+    .run();
+}
+
+// ---------- routine CRUD ----------
+
+export function createRoutine(db: DB, input: CreateRoutineInputT): Routine {
+  const id = newId();
+  let sortOrder = input.sort_order;
+  if (sortOrder === undefined) {
+    const existing = listRoutines(db, true);
+    sortOrder =
+      existing.reduce((max, r) => Math.max(max, r.sortOrder), 0) + 1;
+  }
+  db.insert(schema.routines)
+    .values({
+      id,
+      name: input.name,
+      nameRu: input.name_ru,
+      notes: input.notes ?? null,
+      sortOrder,
+    })
+    .run();
+  return db
+    .select()
+    .from(schema.routines)
+    .where(eq(schema.routines.id, id))
+    .get() as Routine;
+}
+
+export function updateRoutine(
+  db: DB,
+  id: string,
+  input: UpdateRoutineInputT,
+): Routine {
+  const existing = db
+    .select()
+    .from(schema.routines)
+    .where(eq(schema.routines.id, id))
+    .get() as Routine | undefined;
+  if (!existing || existing.isDeleted) {
+    throw new Error("Routine not found");
+  }
+  const updates: Partial<Routine> = {};
+  if (input.name !== undefined) updates.name = input.name;
+  if (input.name_ru !== undefined) updates.nameRu = input.name_ru;
+  if (input.notes !== undefined) updates.notes = input.notes;
+  if (input.sort_order !== undefined) updates.sortOrder = input.sort_order;
+  if (Object.keys(updates).length > 0) {
+    db.update(schema.routines)
+      .set(updates)
+      .where(eq(schema.routines.id, id))
+      .run();
+  }
+  return db
+    .select()
+    .from(schema.routines)
+    .where(eq(schema.routines.id, id))
+    .get() as Routine;
+}
+
+// Soft-delete a routine and all its positions.
+export function deleteRoutine(db: DB, id: string): void {
+  db.update(schema.routines)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.routines.id, id))
+    .run();
+  db.update(schema.routineExercises)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.routineExercises.routineId, id))
+    .run();
+}
+
+// ---------- routine-exercise composition ----------
+
+export function addRoutineExercise(
+  db: DB,
+  routineId: string,
+  input: AddRoutineExerciseInputT,
+): RoutineExercise {
+  const routine = db
+    .select()
+    .from(schema.routines)
+    .where(eq(schema.routines.id, routineId))
+    .get() as Routine | undefined;
+  if (!routine || routine.isDeleted) {
+    throw new Error("Routine not found");
+  }
+
+  let sortOrder = input.sort_order;
+  if (sortOrder === undefined) {
+    const existing = listRoutineExercises(db, routineId).filter(
+      (re) => re.section === input.section,
+    );
+    sortOrder =
+      existing.reduce((max, re) => Math.max(max, re.sortOrder), 0) + 1;
+  }
+
+  const id = newId();
+  db.insert(schema.routineExercises)
+    .values({
+      id,
+      routineId,
+      exerciseId: input.exercise_id,
+      section: input.section,
+      sortOrder,
+      targetSets: input.target_sets,
+      repMin: input.rep_min,
+      repMax: input.rep_max,
+      targetRir: input.target_rir,
+      isRampupScaled: input.is_rampup_scaled ? 1 : 0,
+      notes: input.notes ?? null,
+    })
+    .run();
+  return db
+    .select()
+    .from(schema.routineExercises)
+    .where(eq(schema.routineExercises.id, id))
+    .get() as RoutineExercise;
+}
+
+export function deleteRoutineExercise(db: DB, id: string): void {
+  db.update(schema.routineExercises)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.routineExercises.id, id))
+    .run();
+}
+
+// ---------- set / session soft delete ----------
+
+export function deleteSet(db: DB, id: string): void {
+  db.update(schema.setLogs)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.setLogs.id, id))
+    .run();
+}
+
+// Soft-delete a session and all its sets (so analytics exclude them).
+export function deleteSession(db: DB, id: string): void {
+  db.update(schema.workoutSessions)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.workoutSessions.id, id))
+    .run();
+  db.update(schema.setLogs)
+    .set({ isDeleted: 1 })
+    .where(eq(schema.setLogs.sessionId, id))
+    .run();
+}
+
+// ---------- session plan overrides (v2) ----------
+
+export function recordOverride(
+  db: DB,
+  sessionId: string,
+  input: RecordOverrideInputT,
+): SessionPlanOverride {
+  const id = newId();
+  db.insert(schema.sessionPlanOverrides)
+    .values({
+      id,
+      sessionId,
+      routineExerciseId: input.routine_exercise_id,
+      replacedExerciseId: input.replaced_exercise_id,
+      reason: input.reason ?? null,
+    })
+    .run();
+  return db
+    .select()
+    .from(schema.sessionPlanOverrides)
+    .where(eq(schema.sessionPlanOverrides.id, id))
+    .get() as SessionPlanOverride;
+}
+
+export function listOverrides(
+  db: DB,
+  sessionId?: string,
+): SessionPlanOverride[] {
+  const where = sessionId
+    ? and(
+        eq(schema.sessionPlanOverrides.isDeleted, 0),
+        eq(schema.sessionPlanOverrides.sessionId, sessionId),
+      )
+    : eq(schema.sessionPlanOverrides.isDeleted, 0);
+  return db
+    .select()
+    .from(schema.sessionPlanOverrides)
+    .where(where)
+    .all() as SessionPlanOverride[];
+}
+
+// "How often do I deviate from the plan" — overrides grouped over a range.
+export function getPlanDeviation(
+  db: DB,
+  range?: TrainingRange,
+): PlanDeviation {
+  const rows = (
+    db
+      .select()
+      .from(schema.sessionPlanOverrides)
+      .where(eq(schema.sessionPlanOverrides.isDeleted, 0))
+      .all() as SessionPlanOverride[]
+  ).filter((o) => inRange(o.createdAt, range));
+
+  const acc = new Map<string, { re: string; rep: string; count: number }>();
+  for (const o of rows) {
+    const key = `${o.routineExerciseId}|${o.replacedExerciseId}`;
+    const cur = acc.get(key) ?? {
+      re: o.routineExerciseId,
+      rep: o.replacedExerciseId,
+      count: 0,
+    };
+    cur.count += 1;
+    acc.set(key, cur);
+  }
+
+  return {
+    from: range?.from ?? null,
+    to: range?.to ?? null,
+    totalOverrides: rows.length,
+    byRoutineExercise: [...acc.values()]
+      .map((v) => ({
+        routineExerciseId: v.re,
+        replacedExerciseId: v.rep,
+        count: v.count,
+      }))
+      .sort((a, b) => b.count - a.count),
+  };
 }

@@ -87,6 +87,102 @@ describe("HTR MCP tools", () => {
     expect(after.length).toBe(before.length);
   });
 
+  it("create/list/update/delete exercise lifecycle", () => {
+    const created = call(db, "create_exercise", {
+      name: "Cable Fly",
+      name_ru: "Сведение в кроссовере",
+      muscle_group: "chest",
+      pattern: "isolation",
+    });
+    expect(created.id).toBeTruthy();
+
+    const found = call(db, "list_exercises", { q: "Cable Fly" });
+    expect(found.some((e: any) => e.id === created.id)).toBe(true);
+
+    const updated = call(db, "update_exercise", {
+      id: created.id,
+      name: "Cable Crossover",
+    });
+    expect(updated.name).toBe("Cable Crossover");
+
+    const del = call(db, "delete_exercise", { id: created.id });
+    expect(del.deleted).toBe(created.id);
+
+    const after = call(db, "list_exercises", { q: "Cable" });
+    expect(after.some((e: any) => e.id === created.id)).toBe(false);
+  });
+
+  it("create routine -> add exercise -> list -> delete routine", () => {
+    const routine = call(db, "create_routine", {
+      name: "Push Day",
+      name_ru: "День жима",
+    });
+    expect(routine.id).toBeTruthy();
+
+    const added = call(db, "add_routine_exercise", {
+      routine_id: routine.id,
+      exercise_id: "ex-bench_press",
+      section: "main",
+      target_sets: 3,
+      rep_min: 8,
+      rep_max: 12,
+    });
+    expect(added.id).toBeTruthy();
+
+    const list = call(db, "list_routine_exercises", { routine_id: routine.id });
+    expect(list.length).toBe(1);
+
+    const del = call(db, "delete_routine", { id: routine.id });
+    expect(del.deleted).toBe(routine.id);
+
+    const remaining = call(db, "list_routines");
+    expect(remaining.some((r: any) => r.id === routine.id)).toBe(false);
+  });
+
+  it("start_session -> log_set -> delete_session removes it from list_sessions", () => {
+    const { session_id } = call(db, "start_session", {
+      routine_id: "routine-a",
+      session_index: 5,
+    });
+    call(db, "log_set", {
+      session_id,
+      exercise_id: "ex-bench_press",
+      set_number: 1,
+      weight_g: 60000,
+      reps: 10,
+      rir: 1,
+    });
+    expect(call(db, "list_sessions", {}).length).toBe(1);
+
+    const del = call(db, "delete_session", { session_id });
+    expect(del.deleted).toBe(session_id);
+    expect(call(db, "list_sessions", {}).length).toBe(0);
+  });
+
+  it("record_override -> list_overrides -> get_plan_deviation", () => {
+    const { session_id } = call(db, "start_session", {
+      routine_id: "routine-a",
+      session_index: 5,
+    });
+    const planExercises = call(db, "list_routine_exercises", {
+      routine_id: "routine-a",
+    });
+    expect(planExercises.length).toBeGreaterThan(0);
+
+    call(db, "record_override", {
+      session_id,
+      routine_exercise_id: planExercises[0].id,
+      replaced_exercise_id: "ex-bench_press",
+      reason: "equipment busy",
+    });
+
+    const overrides = call(db, "list_overrides", { session_id });
+    expect(overrides.length).toBe(1);
+
+    const deviation = call(db, "get_plan_deviation", {});
+    expect(deviation.totalOverrides).toBe(1);
+  });
+
   it("log_food logs against a food item and get_daily_summary aggregates it", () => {
     const item = createFoodItem(db, {
       name: "Oats",

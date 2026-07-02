@@ -28,12 +28,36 @@ import {
   listSessions,
   suggestProgression,
   patchRoutineExercise,
+  // training — exercises / routines / authoring
+  listExercises,
+  getExerciseById,
+  listRoutines,
+  listRoutineExercises,
+  createExercise,
+  updateExercise,
+  deleteExercise,
+  createRoutine,
+  updateRoutine,
+  deleteRoutine,
+  addRoutineExercise,
+  deleteRoutineExercise,
+  deleteSet,
+  deleteSession,
+  recordOverride,
+  listOverrides,
+  getPlanDeviation,
   // training schemas
   StartSessionInput,
   LogSetInput,
   EndSessionInput,
   PatchRoutineExerciseInput,
   OverrideProgressionInput,
+  CreateExerciseInput,
+  UpdateExerciseInput,
+  CreateRoutineInput,
+  UpdateRoutineInput,
+  AddRoutineExerciseInput,
+  RecordOverrideInput,
   // formatting
   formatCalories,
   formatMacro,
@@ -238,6 +262,28 @@ const PatchRoutineExerciseSchema = PatchRoutineExerciseInput.extend({
   routine_exercise_id: z.string(),
 });
 
+const ListExercisesSchema = z.object({
+  q: z.string().optional(),
+  muscle_group: z.string().optional(),
+  include_deleted: z.boolean().optional(),
+});
+const IdSchema = z.object({ id: z.string() });
+const RoutineIdSchema = z.object({ routine_id: z.string() });
+const ListOverridesSchema = z.object({ session_id: z.string().optional() });
+const UpdateExerciseSchema = UpdateExerciseInput.extend({ id: z.string() });
+const UpdateRoutineSchema = UpdateRoutineInput.extend({ id: z.string() });
+const AddRoutineExerciseSchema = AddRoutineExerciseInput.extend({
+  routine_id: z.string(),
+});
+const DeleteRoutineExerciseSchema = z.object({
+  routine_exercise_id: z.string(),
+});
+const DeleteSetSchema = z.object({ set_id: z.string() });
+const DeleteSessionSchema = z.object({ session_id: z.string() });
+const RecordOverrideSchema = RecordOverrideInput.extend({
+  session_id: z.string(),
+});
+
 // ---------- tool registry ----------
 
 export const tools: ToolDef[] = [
@@ -423,6 +469,197 @@ export const tools: ToolDef[] = [
         engineSuggestion: suggestProgression(db, parsed.exercise_id),
         override: parsed,
       };
+    },
+  },
+
+  // ===== READ (exercises / routines / overrides) =====
+  {
+    name: "list_exercises",
+    tier: "READ",
+    description:
+      "[READ] List exercises in the library (optional name search q, muscle_group filter, include_deleted).",
+    schema: ListExercisesSchema,
+    handler: (db, args) => {
+      const { q, muscle_group, include_deleted } =
+        ListExercisesSchema.parse(args);
+      return listExercises(db, {
+        q,
+        muscleGroup: muscle_group,
+        includeDeleted: include_deleted,
+      });
+    },
+  },
+  {
+    name: "get_exercise",
+    tier: "READ",
+    description: "[READ] Get a single exercise by id.",
+    schema: IdSchema,
+    handler: (db, args) => {
+      const { id } = IdSchema.parse(args);
+      return getExerciseById(db, id);
+    },
+  },
+  {
+    name: "list_routines",
+    tier: "READ",
+    description: "[READ] List all routines.",
+    schema: EmptySchema,
+    handler: (db) => listRoutines(db),
+  },
+  {
+    name: "list_routine_exercises",
+    tier: "READ",
+    description:
+      "[READ] List the planned exercises (sections, targets) for a routine.",
+    schema: RoutineIdSchema,
+    handler: (db, args) => {
+      const { routine_id } = RoutineIdSchema.parse(args);
+      return listRoutineExercises(db, routine_id);
+    },
+  },
+  {
+    name: "list_overrides",
+    tier: "READ",
+    description:
+      "[READ] List recorded session plan overrides (optionally filtered by session_id).",
+    schema: ListOverridesSchema,
+    handler: (db, args) => {
+      const { session_id } = ListOverridesSchema.parse(args);
+      return listOverrides(db, session_id);
+    },
+  },
+  {
+    name: "get_plan_deviation",
+    tier: "READ",
+    description:
+      "[READ] How often the plan is overridden over a range (from/to, or range=week|month, or all-time).",
+    schema: RangeSchema,
+    handler: (db, args) => {
+      const parsed = RangeSchema.parse(args);
+      return getPlanDeviation(db, resolveRange(parsed));
+    },
+  },
+
+  // ===== SENSITIVE (persistent library / routine authoring) =====
+  {
+    name: "create_exercise",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Create a new exercise in the library. Persistent authoring change to the training catalog.",
+    schema: CreateExerciseInput,
+    handler: (db, args) => createExercise(db, CreateExerciseInput.parse(args)),
+  },
+  {
+    name: "update_exercise",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Update an existing exercise by id. Persistent authoring change to the training catalog.",
+    schema: UpdateExerciseSchema,
+    handler: (db, args) => {
+      const { id, ...rest } = UpdateExerciseSchema.parse(args);
+      return updateExercise(db, id, rest);
+    },
+  },
+  {
+    name: "delete_exercise",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Soft-delete an exercise by id. Persistent authoring change to the training catalog.",
+    schema: IdSchema,
+    handler: (db, args) => {
+      const { id } = IdSchema.parse(args);
+      deleteExercise(db, id);
+      return { deleted: id };
+    },
+  },
+  {
+    name: "create_routine",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Create a new routine. Persistent authoring change to the training plan.",
+    schema: CreateRoutineInput,
+    handler: (db, args) => createRoutine(db, CreateRoutineInput.parse(args)),
+  },
+  {
+    name: "update_routine",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Update a routine by id. Persistent authoring change to the training plan.",
+    schema: UpdateRoutineSchema,
+    handler: (db, args) => {
+      const { id, ...rest } = UpdateRoutineSchema.parse(args);
+      return updateRoutine(db, id, rest);
+    },
+  },
+  {
+    name: "delete_routine",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Soft-delete a routine by id. Persistent authoring change to the training plan.",
+    schema: IdSchema,
+    handler: (db, args) => {
+      const { id } = IdSchema.parse(args);
+      deleteRoutine(db, id);
+      return { deleted: id };
+    },
+  },
+  {
+    name: "add_routine_exercise",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Add an exercise to a routine (section + targets). Persistent authoring change affecting future sessions.",
+    schema: AddRoutineExerciseSchema,
+    handler: (db, args) => {
+      const { routine_id, ...rest } = AddRoutineExerciseSchema.parse(args);
+      return addRoutineExercise(db, routine_id, rest);
+    },
+  },
+  {
+    name: "delete_routine_exercise",
+    tier: "SENSITIVE",
+    description:
+      "[SENSITIVE] Remove a planned exercise from a routine. Persistent authoring change affecting future sessions.",
+    schema: DeleteRoutineExerciseSchema,
+    handler: (db, args) => {
+      const { routine_exercise_id } = DeleteRoutineExerciseSchema.parse(args);
+      deleteRoutineExercise(db, routine_exercise_id);
+      return { deleted: routine_exercise_id };
+    },
+  },
+
+  // ===== WRITE (training log edits) =====
+  {
+    name: "delete_set",
+    tier: "WRITE_TRAINING",
+    description: "[WRITE] Soft-delete a logged set by id.",
+    schema: DeleteSetSchema,
+    handler: (db, args) => {
+      const { set_id } = DeleteSetSchema.parse(args);
+      deleteSet(db, set_id);
+      return { deleted: set_id };
+    },
+  },
+  {
+    name: "delete_session",
+    tier: "WRITE_TRAINING",
+    description:
+      "[WRITE] Soft-delete a workout session (and its sets) by id.",
+    schema: DeleteSessionSchema,
+    handler: (db, args) => {
+      const { session_id } = DeleteSessionSchema.parse(args);
+      deleteSession(db, session_id);
+      return { deleted: session_id };
+    },
+  },
+  {
+    name: "record_override",
+    tier: "WRITE_TRAINING",
+    description:
+      "[WRITE] Record a one-off exercise substitution/override on a session.",
+    schema: RecordOverrideSchema,
+    handler: (db, args) => {
+      const { session_id, ...rest } = RecordOverrideSchema.parse(args);
+      return recordOverride(db, session_id, rest);
     },
   },
 ];

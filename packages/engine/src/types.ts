@@ -340,3 +340,24 @@ export interface TrainingRange {
   from?: string; // YYYY-MM-DD inclusive
   to?: string; // YYYY-MM-DD inclusive
 }
+
+export interface SessionPlanOverride {
+  id: string;
+  sessionId: string;
+  routineExerciseId: string;
+  replacedExerciseId: string;
+  reason: string | null;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export interface PlanDeviation {
+  from: string | null;
+  to: string | null;
+  totalOverrides: number;
+  byRoutineExercise: {
+    routineExerciseId: string;
+    replacedExerciseId: string;
+    count: number;
+  }[];
+}
