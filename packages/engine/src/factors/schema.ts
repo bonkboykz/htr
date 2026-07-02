@@ -24,6 +24,8 @@ export const factors = sqliteTable("factors", {
   id: text("id").primaryKey(),
   categoryId: text("category_id").notNull(),
   name: text("name").notNull(),
+  // "rating" = bounded scale (chips); "count" = unbounded tally (stepper, e.g. beers/cups)
+  kind: text("kind").notNull().default("rating"),
   scaleMin: integer("scale_min").notNull().default(0),
   scaleMax: integer("scale_max").notNull().default(5),
   labels: text("labels"), // JSON: {"1":"Ужасно","5":"Отлично"} | null

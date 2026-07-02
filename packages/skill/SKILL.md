@@ -550,10 +550,13 @@ See `docs/section-7-training-and-mcp.md` for full details.
 
 ## Factors & Correlations (Bearable-style)
 
-Track arbitrary daily factors (mood, symptoms, habits, meds) on an integer scale, then
-find **associations** (not causation) with any other HTR series. Seeded factors include
-`factor-alcohol`, `factor-caffeine`, `factor-energy`, `factor-mood`, `factor-stress`,
-`factor-headache`; categories `cat-mood/symptoms/habits/meds/other`.
+Track arbitrary daily factors (mood, symptoms, habits, meds), then find **associations**
+(not causation) with any other HTR series. Each factor has a `kind`: **`rating`** (bounded
+scale, e.g. mood 1–5) or **`count`** (unbounded tally, e.g. `factor-alcohol` «порций»,
+`factor-caffeine` «чашек» — log 10 beers just fine). Seeded factors: `factor-alcohol`,
+`factor-caffeine` (count); `factor-energy`, `factor-mood`, `factor-stress`, `factor-headache`
+(rating). Categories `cat-mood/symptoms/habits/meds/other`. Create a count factor with
+`{"...","kind":"count","unit":"шт"}`.
 
 ### List factors / categories
 

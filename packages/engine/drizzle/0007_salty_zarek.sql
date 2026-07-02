@@ -1,0 +1,1 @@
+ALTER TABLE `factors` ADD `kind` text DEFAULT 'rating' NOT NULL;

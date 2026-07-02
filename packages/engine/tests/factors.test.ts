@@ -81,11 +81,40 @@ describe("factors: logging", () => {
     expect(hist[0].note).toBe("party");
 
     expect(() =>
-      logFactor(db, { date: "2026-05-02", factorId: "factor-alcohol", value: 9 }),
-    ).toThrow(); // scale 0-5
+      logFactor(db, { date: "2026-05-02", factorId: "factor-headache", value: 9 }),
+    ).toThrow(); // rating factor, scale 0-5
     expect(() =>
       logFactor(db, { date: "2026-05-02", factorId: "nope", value: 1 }),
     ).toThrow(); // unknown factor
+  });
+
+  it("count factors are unbounded; rating factors stay capped", () => {
+    // Alcohol is seeded as a count → 10 beers is fine.
+    const alcohol = getFactor(db, "factor-alcohol");
+    expect(alcohol?.kind).toBe("count");
+    const log = logFactor(db, { date: "2026-05-10", factorId: "factor-alcohol", value: 10 });
+    expect(log.value).toBe(10);
+    expect(() =>
+      logFactor(db, { date: "2026-05-11", factorId: "factor-alcohol", value: -1 }),
+    ).toThrow(); // still non-negative
+
+    // A rating factor rejects values above its scale.
+    expect(getFactor(db, "factor-energy")?.kind).toBe("rating");
+    expect(() =>
+      logFactor(db, { date: "2026-05-10", factorId: "factor-energy", value: 10 }),
+    ).toThrow();
+  });
+
+  it("can create a custom count factor with no upper cap", () => {
+    const water = createFactor(db, {
+      categoryId: "cat-habits",
+      name: "Сигареты",
+      kind: "count",
+      unit: "шт",
+    });
+    expect(water.kind).toBe("count");
+    const l = logFactor(db, { date: "2026-05-12", factorId: water.id, value: 23 });
+    expect(l.value).toBe(23);
   });
 
   it("bulkLogFactors logs several at once", () => {

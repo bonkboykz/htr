@@ -385,6 +385,7 @@ export interface Factor {
   id: string;
   categoryId: string;
   name: string;
+  kind: string; // "rating" (bounded scale) | "count" (unbounded tally)
   scaleMin: number;
   scaleMax: number;
   labels: Record<string, string> | null; // parsed from JSON

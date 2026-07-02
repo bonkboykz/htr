@@ -11,6 +11,7 @@ export const CreateCategoryInput = z.object({
 export const CreateFactorInput = z.object({
   categoryId: z.string(),
   name: z.string().min(1),
+  kind: z.enum(["rating", "count"]).optional(), // default "rating"
   scaleMin: z.number().int().optional(),
   scaleMax: z.number().int().optional(),
   labels: z.record(z.string()).optional(), // {"1":"Ужасно","5":"Отлично"}

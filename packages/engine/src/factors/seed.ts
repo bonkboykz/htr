@@ -11,21 +11,23 @@ const SYSTEM_CATEGORIES = [
 ] as const;
 
 // A few sensible defaults so correlations have something to chew on out of the box.
+// Ratings use a bounded scale (chips); counts are unbounded tallies (stepper).
 const DEFAULT_FACTORS = [
-  { id: "factor-energy", categoryId: "cat-mood", name: "Энергия", scaleMin: 1, scaleMax: 5, labels: null, unit: null },
+  { id: "factor-energy", categoryId: "cat-mood", name: "Энергия", kind: "rating", scaleMin: 1, scaleMax: 5, labels: null, unit: null },
   {
     id: "factor-mood",
     categoryId: "cat-mood",
     name: "Настроение",
+    kind: "rating",
     scaleMin: 1,
     scaleMax: 5,
     labels: JSON.stringify({ "1": "Ужасно", "3": "Норм", "5": "Отлично" }),
     unit: null,
   },
-  { id: "factor-stress", categoryId: "cat-mood", name: "Стресс", scaleMin: 0, scaleMax: 5, labels: null, unit: null },
-  { id: "factor-headache", categoryId: "cat-symptoms", name: "Головная боль", scaleMin: 0, scaleMax: 5, labels: null, unit: null },
-  { id: "factor-alcohol", categoryId: "cat-habits", name: "Алкоголь", scaleMin: 0, scaleMax: 5, labels: null, unit: "порций" },
-  { id: "factor-caffeine", categoryId: "cat-habits", name: "Кофеин", scaleMin: 0, scaleMax: 5, labels: null, unit: "чашек" },
+  { id: "factor-stress", categoryId: "cat-mood", name: "Стресс", kind: "rating", scaleMin: 0, scaleMax: 5, labels: null, unit: null },
+  { id: "factor-headache", categoryId: "cat-symptoms", name: "Головная боль", kind: "rating", scaleMin: 0, scaleMax: 5, labels: null, unit: null },
+  { id: "factor-alcohol", categoryId: "cat-habits", name: "Алкоголь", kind: "count", scaleMin: 0, scaleMax: 0, labels: null, unit: "порций" },
+  { id: "factor-caffeine", categoryId: "cat-habits", name: "Кофеин", kind: "count", scaleMin: 0, scaleMax: 0, labels: null, unit: "чашек" },
 ] as const;
 
 export function seedFactors(db: DB): void {
@@ -48,6 +50,18 @@ export function seedFactors(db: DB): void {
       .get();
     if (!existing) {
       db.insert(schema.factors).values(f).run();
+    } else {
+      // System factors are engine-owned: keep their definition authoritative so
+      // schema changes (e.g. count vs rating) propagate to existing DBs on redeploy.
+      db.update(schema.factors)
+        .set({
+          kind: f.kind,
+          scaleMin: f.scaleMin,
+          scaleMax: f.scaleMax,
+          unit: f.unit,
+        })
+        .where(eq(schema.factors.id, f.id))
+        .run();
     }
   }
 }

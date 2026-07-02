@@ -86,6 +86,7 @@ export function createFactor(db: DB, input: CreateFactorInputT): Factor {
       id,
       categoryId: input.categoryId,
       name: input.name,
+      kind: input.kind ?? "rating",
       scaleMin,
       scaleMax,
       labels: input.labels ? JSON.stringify(input.labels) : null,
@@ -133,7 +134,12 @@ export function logFactor(db: DB, input: LogFactorInputT): FactorLog {
   if (!factor || factor.isDeleted) {
     throw new Error("Factor not found");
   }
-  if (input.value < factor.scaleMin || input.value > factor.scaleMax) {
+  // Count factors are unbounded (just non-negative); rating factors are clamped to the scale.
+  if (factor.kind === "count") {
+    if (input.value < 0) {
+      throw new Error(`Count ${input.value} must be non-negative`);
+    }
+  } else if (input.value < factor.scaleMin || input.value > factor.scaleMax) {
     throw new Error(
       `Value ${input.value} out of scale ${factor.scaleMin}-${factor.scaleMax}`,
     );
