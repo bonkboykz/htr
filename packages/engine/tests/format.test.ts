@@ -11,19 +11,19 @@ import {
 
 describe("formatCalories", () => {
   it("formats small values without separator", () => {
-    expect(formatCalories(500)).toBe("500 kcal");
+    expect(formatCalories(500)).toBe("500 ккал");
   });
 
   it("formats thousands with space separator", () => {
-    expect(formatCalories(2150)).toBe("2 150 kcal");
+    expect(formatCalories(2150)).toBe("2 150 ккал");
   });
 
   it("formats zero", () => {
-    expect(formatCalories(0)).toBe("0 kcal");
+    expect(formatCalories(0)).toBe("0 ккал");
   });
 
   it("formats large values", () => {
-    expect(formatCalories(10500)).toBe("10 500 kcal");
+    expect(formatCalories(10500)).toBe("10 500 ккал");
   });
 });
 

@@ -623,7 +623,7 @@ All values stored as **integers** to avoid floating-point errors:
 | Sleep    | ISO timestamps  | duration computed      |
 
 Response fields include both raw and formatted variants:
-- `calories: 2150` + `caloriesFormatted: "2 150 kcal"`
+- `calories: 2150` + `caloriesFormatted: "2 150 ккал"`
 - `protein: 253` + `proteinFormatted: "25.3 g"`
 - `weightGrams: 75500` + `weightFormatted: "75.5 kg"`
 - `waterMl: 2100` + `waterFormatted: "2.1 L"`

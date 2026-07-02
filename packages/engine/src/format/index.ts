@@ -1,5 +1,5 @@
 export function formatCalories(kcal: number): string {
-  return `${kcal.toLocaleString("en-US").replace(/,/g, " ")} kcal`;
+  return `${kcal.toLocaleString("en-US").replace(/,/g, " ")} ккал`;
 }
 
 export function formatMacro(tenths: number): string {
