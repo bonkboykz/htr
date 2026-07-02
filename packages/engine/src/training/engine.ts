@@ -258,30 +258,37 @@ export function getToday(db: DB): {
   };
 }
 
-// Working (non-warmup, non-deleted) sets of the most recent session that has
-// any such set for this exercise. Ordered by set number.
+// Working (non-warmup, non-deleted) sets of the most recent session — by the
+// session's started_at, not insertion order — that has any such set for this
+// exercise. This makes backdated sessions slot in by their real date; ties break
+// by insertion order (set_logs.rowid). Ordered by set number.
 export function getLastPerformance(db: DB, exerciseId: string): SetRow[] {
-  const lastSet = db
-    .select()
+  const latest = db
+    .select({ sessionId: schema.setLogs.sessionId })
     .from(schema.setLogs)
+    .innerJoin(
+      schema.workoutSessions,
+      eq(schema.workoutSessions.id, schema.setLogs.sessionId),
+    )
     .where(
       and(
         eq(schema.setLogs.exerciseId, exerciseId),
         eq(schema.setLogs.isWarmup, 0),
         eq(schema.setLogs.isDeleted, 0),
+        eq(schema.workoutSessions.isDeleted, 0),
       ),
     )
-    .orderBy(sql`rowid DESC`)
+    .orderBy(desc(schema.workoutSessions.startedAt), sql`set_logs.rowid DESC`)
     .limit(1)
-    .get() as SetRow | undefined;
-  if (!lastSet) return [];
+    .get() as { sessionId: string } | undefined;
+  if (!latest) return [];
 
   return db
     .select()
     .from(schema.setLogs)
     .where(
       and(
-        eq(schema.setLogs.sessionId, lastSet.sessionId),
+        eq(schema.setLogs.sessionId, latest.sessionId),
         eq(schema.setLogs.exerciseId, exerciseId),
         eq(schema.setLogs.isWarmup, 0),
         eq(schema.setLogs.isDeleted, 0),

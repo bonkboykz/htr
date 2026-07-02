@@ -227,6 +227,22 @@ describe("training: getLastPerformance", () => {
     expect(perf[0].weightG).toBe(55000);
   });
 
+  it("picks the last session by started_at, not insertion order (backdating aware)", () => {
+    // s1 inserted FIRST but dated LATER; s2 inserted SECOND but dated EARLIER.
+    const s1 = startSession(db, { routine_id: "routine-a", session_index: 5, started_at: "2026-06-10T09:00:00.000Z" });
+    logSet(db, s1.session_id, { exercise_id: BENCH, set_number: 1, weight_g: 55000, reps: 8, rir: 1, is_warmup: false });
+    endSession(db, s1.session_id, { ended_at: "2026-06-10T10:00:00.000Z" });
+
+    const s2 = startSession(db, { routine_id: "routine-a", session_index: 6, started_at: "2026-06-03T09:00:00.000Z" });
+    logSet(db, s2.session_id, { exercise_id: BENCH, set_number: 1, weight_g: 50000, reps: 10, rir: 2, is_warmup: false });
+    endSession(db, s2.session_id, { ended_at: "2026-06-03T10:00:00.000Z" });
+
+    // Latest by DATE is s1 (2026-06-10), even though s2 was inserted later.
+    const perf = getLastPerformance(db, BENCH);
+    expect(perf).toHaveLength(1);
+    expect(perf[0].weightG).toBe(55000);
+  });
+
   it("ignores soft-deleted sets", () => {
     const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
     const a = logSet(db, s.session_id, { exercise_id: BENCH, set_number: 1, weight_g: 50000, reps: 10, rir: 2, is_warmup: false });
