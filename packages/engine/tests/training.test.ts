@@ -28,6 +28,8 @@ import {
   listRoutineExercises,
   deleteSet,
   deleteSession,
+  getSessionDetail,
+  updateSet,
   recordOverride,
   listOverrides,
   getPlanDeviation,
@@ -608,6 +610,46 @@ describe("training: static / timed exercises (duration_s)", () => {
     expect(prog.metric).toBe("weight");
     expect(prog.currentE1rmG).toBe(epley1RM(50000, 10));
     expect(prog.currentDurationS).toBe(0);
+  });
+});
+
+describe("training: session detail & set editing", () => {
+  let db: DB;
+  beforeEach(() => {
+    db = setupTestDb();
+  });
+
+  it("getSessionDetail returns summary + sets with exercise names", () => {
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    logSet(db, s.session_id, { exercise_id: BENCH, set_number: 1, weight_g: 50000, reps: 10, rir: 2, is_warmup: false });
+    logSet(db, s.session_id, { exercise_id: BENCH, set_number: 2, weight_g: 50000, reps: 9, rir: 1, is_warmup: false });
+    endSession(db, s.session_id, {});
+
+    const detail = getSessionDetail(db, s.session_id);
+    expect(detail).not.toBeNull();
+    expect(detail!.session.totalSets).toBe(2);
+    expect(detail!.session.totalVolumeG).toBe(50000 * 10 + 50000 * 9);
+    expect(detail!.session.routineName).toBe("Workout A");
+    expect(detail!.sets).toHaveLength(2);
+    expect(detail!.sets[0].exerciseName).toBeTruthy(); // exercise nameRu
+    expect(detail!.sets[0].reps).toBe(10);
+
+    expect(getSessionDetail(db, "nope")).toBeNull();
+  });
+
+  it("updateSet edits a logged set and rejects unknown ids", () => {
+    const s = startSession(db, { routine_id: "routine-a", session_index: 5 });
+    const set = logSet(db, s.session_id, { exercise_id: BENCH, set_number: 1, weight_g: 50000, reps: 10, rir: 2, is_warmup: false });
+
+    const updated = updateSet(db, set.set_id, { weight_g: 52500, reps: 11 });
+    expect(updated.weightG).toBe(52500);
+    expect(updated.reps).toBe(11);
+    expect(updated.rir).toBe(2); // unchanged
+
+    const detail = getSessionDetail(db, s.session_id);
+    expect(detail!.sets[0].weightG).toBe(52500);
+
+    expect(() => updateSet(db, "nope", { reps: 5 })).toThrow();
   });
 });
 

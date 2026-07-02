@@ -18,11 +18,17 @@ import type {
   SessionSummary,
   TrainingRange,
 } from "../types.js";
-import type { SessionPlanOverride, PlanDeviation } from "../types.js";
+import type {
+  SessionPlanOverride,
+  PlanDeviation,
+  SessionDetail,
+  SessionSetRow,
+} from "../types.js";
 import type {
   StartSessionInputT,
   LogSetInputT,
   EndSessionInputT,
+  UpdateSetInputT,
   PatchRoutineExerciseInputT,
   CreateExerciseInputT,
   UpdateExerciseInputT,
@@ -712,6 +718,119 @@ export function listSessions(
     });
   }
   return result;
+}
+
+// Full detail of one session (for history view / editing): summary + its sets
+// (with exercise names). Working-set totals mirror listSessions.
+export function getSessionDetail(
+  db: DB,
+  sessionId: string,
+): SessionDetail | null {
+  const s = db
+    .select()
+    .from(schema.workoutSessions)
+    .where(
+      and(
+        eq(schema.workoutSessions.id, sessionId),
+        eq(schema.workoutSessions.isDeleted, 0),
+      ),
+    )
+    .get() as WorkoutSession | undefined;
+  if (!s) return null;
+
+  const routine = db
+    .select({ name: schema.routines.name })
+    .from(schema.routines)
+    .where(eq(schema.routines.id, s.routineId))
+    .get() as { name: string } | undefined;
+
+  const exercises = db
+    .select({ id: schema.exercises.id, nameRu: schema.exercises.nameRu })
+    .from(schema.exercises)
+    .all() as { id: string; nameRu: string }[];
+  const nameOf = new Map(exercises.map((e) => [e.id, e.nameRu]));
+
+  const rawSets = db
+    .select()
+    .from(schema.setLogs)
+    .where(
+      and(
+        eq(schema.setLogs.sessionId, sessionId),
+        eq(schema.setLogs.isDeleted, 0),
+      ),
+    )
+    .orderBy(sql`rowid ASC`)
+    .all() as SetRow[];
+
+  const sets: SessionSetRow[] = rawSets.map((r) => ({
+    ...r,
+    exerciseName: nameOf.get(r.exerciseId) ?? r.exerciseId,
+  }));
+
+  const working = sets.filter((x) => x.isWarmup === 0);
+  const totalVolumeG = working.reduce(
+    (sum, x) => sum + setVolumeG(x.weightG, x.reps),
+    0,
+  );
+  const durationS = s.endedAt
+    ? Math.max(
+        0,
+        Math.round(
+          (new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) /
+            1000,
+        ),
+      )
+    : null;
+
+  return {
+    session: {
+      id: s.id,
+      routineId: s.routineId,
+      routineName: routine?.name ?? "",
+      sessionIndex: s.sessionIndex,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      durationS,
+      totalSets: working.length,
+      totalVolumeG,
+    },
+    sets,
+  };
+}
+
+// Edit an already-logged set (history correction).
+export function updateSet(
+  db: DB,
+  setId: string,
+  input: UpdateSetInputT,
+): SetRow {
+  const existing = db
+    .select()
+    .from(schema.setLogs)
+    .where(eq(schema.setLogs.id, setId))
+    .get() as SetRow | undefined;
+  if (!existing || existing.isDeleted) {
+    throw new Error("Set not found");
+  }
+
+  const updates: Partial<SetRow> = {};
+  if (input.weight_g !== undefined) updates.weightG = input.weight_g;
+  if (input.reps !== undefined) updates.reps = input.reps;
+  if (input.rir !== undefined) updates.rir = input.rir;
+  if (input.duration_s !== undefined) updates.durationS = input.duration_s;
+
+  if (Object.keys(updates).length > 0) {
+    db.update(schema.setLogs)
+      .set(updates)
+      .where(eq(schema.setLogs.id, setId))
+      .run();
+  }
+
+  return db
+    .select()
+    .from(schema.setLogs)
+    .where(eq(schema.setLogs.id, setId))
+    .get() as SetRow;
 }
 
 // ---------- catalog reads ----------

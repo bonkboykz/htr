@@ -10,6 +10,8 @@ import {
   getProgression,
   getVolumeStats,
   listSessions,
+  getSessionDetail,
+  updateSet,
   patchRoutineExercise,
   suggestProgression,
   listExercises,
@@ -31,6 +33,7 @@ import {
   getPlanDeviation,
   StartSessionInput,
   LogSetInput,
+  UpdateSetInput,
   EndSessionInput,
   OverrideProgressionInput,
   PatchRoutineExerciseInput,
@@ -225,6 +228,43 @@ export function trainingRoutes(db: DB) {
         volumeFormatted: formatVolume(s.totalVolumeG),
       })),
     );
+  });
+
+  // GET /sessions/:id — one session's detail (summary + its sets), for history/editing
+  app.get("/sessions/:id", (c) => {
+    const detail = getSessionDetail(db, c.req.param("id"));
+    if (!detail) {
+      throw new AppError("NOT_FOUND", "Session not found", 404);
+    }
+    return c.json({
+      session: {
+        ...detail.session,
+        volumeFormatted: formatVolume(detail.session.totalVolumeG),
+        durationFormatted:
+          detail.session.durationS != null
+            ? formatDuration(detail.session.durationS)
+            : null,
+      },
+      sets: detail.sets.map((s) => ({
+        ...s,
+        weightFormatted: formatWeight(s.weightG),
+        durationFormatted:
+          s.durationS != null ? formatDuration(s.durationS) : null,
+      })),
+    });
+  });
+
+  // PATCH /sessions/:sid/sets/:setId — edit a logged set (history correction)
+  app.patch("/sessions/:sid/sets/:setId", async (c) => {
+    const body = await c.req.json();
+    const parsed = UpdateSetInput.safeParse(body);
+    if (!parsed.success) return validationError(c, parsed.error.issues);
+    try {
+      const set = updateSet(db, c.req.param("setId"), parsed.data);
+      return c.json({ ...set, weightFormatted: formatWeight(set.weightG) });
+    } catch (err: any) {
+      throw new AppError("NOT_FOUND", err.message, 404);
+    }
   });
 
   // ---------- plan edits ----------

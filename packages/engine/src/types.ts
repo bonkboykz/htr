@@ -348,6 +348,15 @@ export interface TrainingRange {
   to?: string; // YYYY-MM-DD inclusive
 }
 
+export interface SessionSetRow extends SetRow {
+  exerciseName: string; // exercise nameRu, for display in history
+}
+
+export interface SessionDetail {
+  session: SessionSummary;
+  sets: SessionSetRow[];
+}
+
 export interface SessionPlanOverride {
   id: string;
   sessionId: string;

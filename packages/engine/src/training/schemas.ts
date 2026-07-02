@@ -22,6 +22,14 @@ export const LogSetInput = z.object({
   is_warmup: z.boolean().default(false),
 });
 
+// Edit an already-logged set (history correction).
+export const UpdateSetInput = z.object({
+  weight_g: z.number().int().nonnegative().optional(),
+  reps: z.number().int().nonnegative().optional(),
+  rir: z.number().int().min(0).max(5).nullable().optional(),
+  duration_s: z.number().int().nonnegative().nullable().optional(),
+});
+
 export const StartSessionInput = z.object({
   routine_id: z.string(),
   session_index: z.number().int().min(1).optional(), // derived if omitted
@@ -121,6 +129,7 @@ export const RecordOverrideInput = z.object({
 export type Section = z.infer<typeof SectionEnum>;
 export type Pattern = z.infer<typeof PatternEnum>;
 export type LogSetInputT = z.infer<typeof LogSetInput>;
+export type UpdateSetInputT = z.infer<typeof UpdateSetInput>;
 export type StartSessionInputT = z.infer<typeof StartSessionInput>;
 export type EndSessionInputT = z.infer<typeof EndSessionInput>;
 export type OverrideProgressionInputT = z.infer<typeof OverrideProgressionInput>;

@@ -26,6 +26,8 @@ import {
   getProgression,
   getVolumeStats,
   listSessions,
+  getSessionDetail,
+  updateSet,
   suggestProgression,
   patchRoutineExercise,
   // training — exercises / routines / authoring
@@ -49,6 +51,7 @@ import {
   // training schemas
   StartSessionInput,
   LogSetInput,
+  UpdateSetInput,
   EndSessionInput,
   PatchRoutineExerciseInput,
   OverrideProgressionInput,
@@ -383,6 +386,17 @@ export const tools: ToolDef[] = [
     },
   },
   {
+    name: "get_session_detail",
+    tier: "READ",
+    description:
+      "[READ] One workout session's full detail: summary + all its logged sets (with exercise names).",
+    schema: z.object({ session_id: z.string() }),
+    handler: (db, args) => {
+      const { session_id } = z.object({ session_id: z.string() }).parse(args);
+      return getSessionDetail(db, session_id);
+    },
+  },
+  {
     name: "get_routine_plan",
     tier: "READ",
     description:
@@ -662,6 +676,19 @@ export const tools: ToolDef[] = [
   },
 
   // ===== WRITE (training log edits) =====
+  {
+    name: "update_set",
+    tier: "WRITE_TRAINING",
+    description:
+      "[WRITE] Edit an already-logged set (weight_g/reps/rir/duration_s) by id — history correction.",
+    schema: UpdateSetInput.extend({ set_id: z.string() }),
+    handler: (db, args) => {
+      const { set_id, ...rest } = UpdateSetInput.extend({
+        set_id: z.string(),
+      }).parse(args);
+      return updateSet(db, set_id, rest);
+    },
+  },
   {
     name: "delete_set",
     tier: "WRITE_TRAINING",
