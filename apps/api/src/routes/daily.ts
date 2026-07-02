@@ -7,6 +7,7 @@ import {
   getActiveTarget,
   getLatestWeight,
   getTargetCalories,
+  getFactorLogsForDate,
   formatCalories,
   formatMacro,
   formatWater,
@@ -77,6 +78,9 @@ export function dailyRoutes(db: DB) {
     const weightForDate: WeightLogEntry | null =
       latestWeight && latestWeight.date === date ? latestWeight : null;
 
+    // Factors (grouped by category)
+    const factors = getFactorLogsForDate(db, date);
+
     // Target
     const target = getActiveTarget(db, date);
     const targetSleepMinutes = target?.sleepMinutes ?? 480;
@@ -103,6 +107,7 @@ export function dailyRoutes(db: DB) {
 
     return c.json({
       date,
+      factors,
       caloriesBudget,
       tdee: tdeeCalc
         ? {

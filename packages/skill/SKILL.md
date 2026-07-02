@@ -7,8 +7,9 @@ description: >
   калории, макросы, "сколько съел", weight tracking, вес, water intake, вода,
   sleep tracking, сон, nutrition goals, КБЖУ, TDEE, "сколько калорий нужно",
   цель по весу, тренировки, workout, подходы, прогрессия, жим, объём, e1RM,
-  "начни тренировку", "запиши подход".
-version: 0.5.0
+  "начни тренировку", "запиши подход", факторы, привычки, настроение, симптомы,
+  корреляции, зависимости, insights, "связь пиво и сон", habit tracking.
+version: 0.6.0
 metadata:
   openclaw:
     emoji: "🏋️"
@@ -544,6 +545,64 @@ catalog, overrides, adherence), **WRITE** (`log_food/weight/sleep/water`), **WRI
 **SENSITIVE** (`patch_routine_exercise`, `override_progression`, and authoring:
 `create/update/delete_exercise`, `create/update/delete_routine`, `add/delete_routine_exercise`).
 See `docs/section-7-training-and-mcp.md` for full details.
+
+---
+
+## Factors & Correlations (Bearable-style)
+
+Track arbitrary daily factors (mood, symptoms, habits, meds) on an integer scale, then
+find **associations** (not causation) with any other HTR series. Seeded factors include
+`factor-alcohol`, `factor-caffeine`, `factor-energy`, `factor-mood`, `factor-stress`,
+`factor-headache`; categories `cat-mood/symptoms/habits/meds/other`.
+
+### List factors / categories
+
+```bash
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/factor-categories" | jq
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/factors?categoryId=cat-habits" | jq
+```
+
+### Log a factor for a date (upsert on date+factor)
+
+```bash
+curl -s -X POST "$HTR_API_URL/api/v1/factor-logs" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"date":"2026-05-01","factorId":"factor-alcohol","value":2,"note":"2 пива"}' | jq
+
+# Log several at once
+curl -s -X POST "$HTR_API_URL/api/v1/factor-logs/bulk" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"date":"2026-05-01","entries":[{"factorId":"factor-energy","value":4},{"factorId":"factor-stress","value":2}]}' | jq
+```
+
+Value must be within the factor's `scaleMin..scaleMax`. `GET /api/v1/factor-logs?date=` returns
+the day grouped by category; `GET /api/v1/factor-logs/history?factorId=&days=` returns history.
+
+### Correlations & insights
+
+```bash
+# Available series (factor:* + htr:calories/protein/fat/carbs/water-ml/sleep-minutes/weight-grams/training-volume)
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/correlations/sources" | jq
+
+# Pairwise Spearman with a lag (beer today → sleep next night = lag 1)
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/correlations?seriesA=factor:factor-alcohol&seriesB=htr:sleep-minutes&from=2026-05-01&to=2026-05-31&lag=1" | jq
+
+# Matrix over several series
+curl -s -X POST "$HTR_API_URL/api/v1/correlations/matrix" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"sources":["factor:factor-alcohol","htr:sleep-minutes","htr:training-volume"],"from":"2026-05-01","to":"2026-05-31","lag":1}' | jq
+
+# Group comparison: "on days with the factor, metric ±%"
+curl -s -X POST "$HTR_API_URL/api/v1/correlations/group" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"factorSource":"factor:factor-alcohol","metricSource":"htr:sleep-minutes","from":"2026-05-01","to":"2026-05-31","lag":1}' | jq
+
+# Auto insights (top significant associations, association-framed)
+curl -s -H "$AUTH" "$HTR_API_URL/api/v1/correlations/insights?from=2026-05-01&to=2026-05-31" | jq
+```
+
+⚠️ Output is **association with a confidence level** (`significance` + `dataPoints`), never causation.
+Needs ≥7 shared days. Sleep is attributed to the wake date, so "X today → sleep tonight" = `lag 1`.
 
 ---
 

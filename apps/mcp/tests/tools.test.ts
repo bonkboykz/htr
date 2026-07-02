@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { setupTestDb, createFoodItem, type DB } from "@htr/engine";
+import { setupTestDb, createFoodItem, logSleep, type DB } from "@htr/engine";
 import { toolsByName } from "../src/tools.js";
 
 function call<T = any>(db: DB, name: string, args: unknown = {}): T {
@@ -212,5 +212,78 @@ describe("HTR MCP tools", () => {
     });
     const summary = call(db, "get_daily_summary", { date: "2026-07-01" });
     expect(summary.nutrition.totals.calories).toBe(190);
+  });
+
+  it("log_factor upserts and get_factor_history reflects it", () => {
+    call(db, "log_factor", {
+      date: "2026-06-01",
+      factorId: "factor-alcohol",
+      value: 2,
+    });
+    let history = call(db, "get_factor_history", { factorId: "factor-alcohol" });
+    expect(history.length).toBe(1);
+    expect(history[0].value).toBe(2);
+
+    // re-log same date -> upsert, still one entry
+    call(db, "log_factor", {
+      date: "2026-06-01",
+      factorId: "factor-alcohol",
+      value: 3,
+    });
+    history = call(db, "get_factor_history", { factorId: "factor-alcohol" });
+    expect(history.length).toBe(1);
+    expect(history[0].value).toBe(3);
+  });
+
+  it("list_correlation_sources includes factor + htr sources", () => {
+    const sources = call(db, "list_correlation_sources");
+    expect(sources.length).toBeGreaterThan(0);
+    expect(sources.some((s: any) => s.id === "factor:factor-alcohol")).toBe(
+      true,
+    );
+    expect(sources.some((s: any) => s.id === "htr:sleep-minutes")).toBe(true);
+  });
+
+  it("planted alcohol->sleep signal surfaces via get_correlation + get_insights", () => {
+    const day = (i: number): string => {
+      const d = new Date(Date.UTC(2026, 4, 1));
+      d.setUTCDate(d.getUTCDate() + i);
+      return d.toISOString().slice(0, 10);
+    };
+    for (let i = 0; i < 24; i++) {
+      const alc = i % 4;
+      call(db, "log_factor", {
+        date: day(i),
+        factorId: "factor-alcohol",
+        value: alc,
+      });
+      const start = `${day(i)}T23:00:00.000Z`;
+      const durationMin = 480 - alc * 45;
+      const end = new Date(
+        new Date(start).getTime() + durationMin * 60000,
+      ).toISOString();
+      logSleep(db, { startTime: start, endTime: end });
+    }
+
+    const corr = call(db, "get_correlation", {
+      seriesA: "factor:factor-alcohol",
+      seriesB: "htr:sleep-minutes",
+      from: day(0),
+      to: day(25),
+      lag: 1,
+    });
+    expect(corr).not.toBeNull();
+    expect(corr.coefficient).toBeLessThan(-0.9);
+    expect(corr.significance).toBe("high");
+
+    const insights = call(db, "get_insights", { from: day(0), to: day(25) });
+    expect(
+      insights.some(
+        (i: any) =>
+          i.factorSource === "factor:factor-alcohol" &&
+          i.metricSource === "htr:sleep-minutes" &&
+          i.significance !== "none",
+      ),
+    ).toBe(true);
   });
 });

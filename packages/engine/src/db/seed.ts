@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { createDb, schema } from "./index.js";
 import { seedTraining } from "../training/seed.js";
+import { seedFactors } from "../factors/seed.js";
 
 const SYSTEM_MEALS = [
   { id: "meal-breakfast", name: "Breakfast", sortOrder: 1, isSystem: 1 },
@@ -28,5 +29,6 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/.*\//, 
   const db = createDb(dbPath);
   seedMeals(db);
   seedTraining(db);
+  seedFactors(db);
   console.log("Seed completed successfully.");
 }

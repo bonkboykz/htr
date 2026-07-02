@@ -368,3 +368,101 @@ export interface PlanDeviation {
     count: number;
   }[];
 }
+
+// ---------- Factors & Correlations (Bearable-style) ----------
+
+export interface FactorCategory {
+  id: string;
+  name: string;
+  emoji: string | null;
+  sortOrder: number;
+  isSystem: number;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export interface Factor {
+  id: string;
+  categoryId: string;
+  name: string;
+  scaleMin: number;
+  scaleMax: number;
+  labels: Record<string, string> | null; // parsed from JSON
+  unit: string | null;
+  isDeleted: number;
+  createdAt: string;
+}
+
+export interface FactorLog {
+  id: string;
+  date: string;
+  factorId: string;
+  value: number;
+  note: string | null;
+  isDeleted: number;
+  createdAt: string;
+}
+
+// A day's factor logs, grouped by category (all factors shown, log or null).
+export interface FactorLogsForDate {
+  category: FactorCategory;
+  factors: { factor: Factor; log: FactorLog | null }[];
+}
+
+export type Significance = "high" | "medium" | "low" | "none";
+
+// A daily time series keyed by source id ("factor:{id}" | "htr:calories" | ...).
+export interface DataSeries {
+  source: string;
+  points: { date: string; value: number }[];
+}
+
+export interface Correlation {
+  seriesA: string;
+  seriesB: string;
+  lag: number; // days seriesB is shifted relative to seriesA
+  coefficient: number; // Spearman rho, -1..1
+  pValue: number;
+  significance: Significance;
+  dataPoints: number;
+}
+
+export interface CorrelationMatrix {
+  series: string[];
+  lag: number;
+  correlations: Correlation[];
+}
+
+// Habit/binary comparison: metric on days WITH the factor vs WITHOUT.
+export interface GroupComparison {
+  factorSource: string;
+  metricSource: string;
+  lag: number;
+  threshold: number; // factor "present" when value >= threshold
+  withMean: number;
+  withoutMean: number;
+  deltaPct: number; // (withMean - withoutMean) / withoutMean * 100
+  nWith: number;
+  nWithout: number;
+  pValue: number; // Welch t-test
+  significance: Significance;
+}
+
+export interface Insight {
+  kind: "correlation" | "group";
+  factorSource: string;
+  metricSource: string;
+  lag: number;
+  coefficient?: number; // for correlation insights
+  deltaPct?: number; // for group insights
+  pValue: number;
+  significance: Significance;
+  dataPoints: number;
+  summary: string; // human-readable, association-framed
+}
+
+export interface CorrelationSource {
+  id: string; // "factor:{id}" | "htr:calories" | ...
+  label: string;
+  kind: "factor" | "htr";
+}

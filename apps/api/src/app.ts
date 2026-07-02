@@ -15,6 +15,10 @@ import { statsRoutes } from "./routes/stats.js";
 import { profileRoutes } from "./routes/profile.js";
 import { goalsRoutes } from "./routes/goals.js";
 import { trainingRoutes } from "./routes/training.js";
+import { factorCategoriesRoutes } from "./routes/factor-categories.js";
+import { factorsRoutes } from "./routes/factors.js";
+import { factorLogsRoutes } from "./routes/factor-logs.js";
+import { correlationsRoutes } from "./routes/correlations.js";
 import { mcpRoutes } from "./mcp.js";
 
 export function createApp(db: DB) {
@@ -42,6 +46,10 @@ export function createApp(db: DB) {
   app.route("/api/v1/profile", profileRoutes(db));
   app.route("/api/v1/goals", goalsRoutes(db));
   app.route("/api/v1/training", trainingRoutes(db));
+  app.route("/api/v1/factor-categories", factorCategoriesRoutes(db));
+  app.route("/api/v1/factors", factorsRoutes(db));
+  app.route("/api/v1/factor-logs", factorLogsRoutes(db));
+  app.route("/api/v1/correlations", correlationsRoutes(db));
 
   // Remote MCP endpoint (token-gated, shares the same db). URL: /mcp/<HTR_API_KEY>
   app.route("/mcp", mcpRoutes(db));

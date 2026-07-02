@@ -1,6 +1,23 @@
-# Section 6 — Факторы и Корреляции (Спецификация)
+# Section 6 — Факторы и Корреляции
 
-> **Статус**: Только спецификация. Реализация в будущей версии.
+> **Статус**: ✅ Реализовано (движок + REST + MCP + дизайн). Ниже — исходная спека; отклонения от неё:
+>
+> - **Ключи входа — camelCase** (как в nutrition/profile): `logFactor({date, factorId, value, note?})`,
+>   `createFactor({categoryId, name, scaleMin?, scaleMax?, labels?, unit?})` и т.д.
+> - **Корреляции умнее спеки:** добавлены **лаги** (`getCorrelation(..., {lag})` — сегодня→завтра, для
+>   «пиво→сон» это lag +1, т.к. сон привязан к дате пробуждения), **group-comparison**
+>   (`getGroupComparison` → «в дни с фактором метрика ±%», Welch t-test) и **auto-insights**
+>   (`getAutoInsights` — скан фактор×метрика по lag 0/+1, топ значимых, формулировка «вероятная связь»).
+> - **Источники расширены:** помимо `htr:calories|protein|fat|carbs|water-ml|sleep-minutes|weight-grams`
+>   добавлен **`htr:training-volume`** (дневной объём тренировок). Ряды строятся из реальных логов
+>   (дни без данных пропускаются, не zero-fill). `GET /api/v1/correlations/sources` перечисляет доступное.
+> - **Статистика — инлайн, без библиотек:** tie-corrected Spearman ρ; p-value через Student-t /
+>   регуляризованную неполную бета-функцию; порог значимости 7 общих точек.
+> - **Upsert `factor_logs`** по `(date, factor_id)` через select-then-update (паттерн `setProfile`).
+> - Схема — в `packages/engine/src/factors/schema.ts` (миграция `0006`), движки в `factors/` и
+>   `correlations/`. Сид: 5 системных категорий + 6 дефолтных факторов (энергия/настроение/стресс/
+>   головная боль/алкоголь/кофеин).
+> - MCP: 16 инструментов (9 READ + 7 WRITE). Экраны Pencil: «Факторы» + «Insights».
 
 ---
 

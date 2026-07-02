@@ -58,6 +58,33 @@ import {
   UpdateRoutineInput,
   AddRoutineExerciseInput,
   RecordOverrideInput,
+  // factors
+  createCategory,
+  listCategories,
+  deleteCategory,
+  createFactor,
+  listFactors,
+  deleteFactor,
+  logFactor,
+  bulkLogFactors,
+  deleteFactorLog,
+  getFactorLogsForDate,
+  getFactorHistory,
+  // correlations
+  getCorrelation,
+  getCorrelationMatrix,
+  getGroupComparison,
+  getAutoInsights,
+  listCorrelationSources,
+  // factor / correlation schemas
+  CreateCategoryInput,
+  CreateFactorInput,
+  LogFactorInput,
+  BulkLogFactorsInput,
+  CorrelationQueryInput,
+  MatrixInput,
+  GroupCompareInput,
+  InsightsInput,
   // formatting
   formatCalories,
   formatMacro,
@@ -282,6 +309,13 @@ const DeleteSetSchema = z.object({ set_id: z.string() });
 const DeleteSessionSchema = z.object({ session_id: z.string() });
 const RecordOverrideSchema = RecordOverrideInput.extend({
   session_id: z.string(),
+});
+
+// factors
+const ListFactorsSchema = z.object({ categoryId: z.string().optional() });
+const FactorHistorySchema = z.object({
+  factorId: z.string(),
+  days: z.number().int().positive().optional(),
 });
 
 // ---------- tool registry ----------
@@ -660,6 +694,170 @@ export const tools: ToolDef[] = [
     handler: (db, args) => {
       const { session_id, ...rest } = RecordOverrideSchema.parse(args);
       return recordOverride(db, session_id, rest);
+    },
+  },
+
+  // ===== READ (factors / correlations) =====
+  {
+    name: "list_factor_categories",
+    tier: "READ",
+    description: "[READ] List all factor categories.",
+    schema: EmptySchema,
+    handler: (db) => listCategories(db),
+  },
+  {
+    name: "list_factors",
+    tier: "READ",
+    description:
+      "[READ] List trackable factors, optionally filtered by categoryId.",
+    schema: ListFactorsSchema,
+    handler: (db, args) => {
+      const { categoryId } = ListFactorsSchema.parse(args);
+      return listFactors(db, categoryId);
+    },
+  },
+  {
+    name: "get_factor_logs",
+    tier: "READ",
+    description: "[READ] Get all factor logs recorded for a date.",
+    schema: DateSchema,
+    handler: (db, args) => {
+      const { date } = DateSchema.parse(args);
+      return getFactorLogsForDate(db, date);
+    },
+  },
+  {
+    name: "get_factor_history",
+    tier: "READ",
+    description:
+      "[READ] Recent logged values for a factor (most recent first, optional days limit).",
+    schema: FactorHistorySchema,
+    handler: (db, args) => {
+      const { factorId, days } = FactorHistorySchema.parse(args);
+      return getFactorHistory(db, factorId, days);
+    },
+  },
+  {
+    name: "get_correlation",
+    tier: "READ",
+    description:
+      "[READ] Spearman correlation between two data series over a date range (optional lag in days). ASSOCIATION only, not causation.",
+    schema: CorrelationQueryInput,
+    handler: (db, args) => {
+      const { seriesA, seriesB, from, to, lag } =
+        CorrelationQueryInput.parse(args);
+      return getCorrelation(db, seriesA, seriesB, from, to, { lag });
+    },
+  },
+  {
+    name: "get_correlation_matrix",
+    tier: "READ",
+    description:
+      "[READ] Pairwise correlation matrix across data sources over a range (optional lag). ASSOCIATIONS only, not causation.",
+    schema: MatrixInput,
+    handler: (db, args) => {
+      const { sources, from, to, lag } = MatrixInput.parse(args);
+      return getCorrelationMatrix(db, sources, from, to, { lag });
+    },
+  },
+  {
+    name: "get_group_comparison",
+    tier: "READ",
+    description:
+      "[READ] Compare a metric on days a factor is present vs absent over a range (optional lag, threshold). ASSOCIATION only, not causation.",
+    schema: GroupCompareInput,
+    handler: (db, args) => {
+      const { factorSource, metricSource, from, to, lag, threshold } =
+        GroupCompareInput.parse(args);
+      return getGroupComparison(db, factorSource, metricSource, from, to, {
+        lag,
+        threshold,
+      });
+    },
+  },
+  {
+    name: "get_insights",
+    tier: "READ",
+    description:
+      "[READ] Auto-discovered factor/metric relationships over a range. Results are ASSOCIATIONS, not causation.",
+    schema: InsightsInput,
+    handler: (db, args) => {
+      const { from, to } = InsightsInput.parse(args);
+      return getAutoInsights(db, from, to);
+    },
+  },
+  {
+    name: "list_correlation_sources",
+    tier: "READ",
+    description:
+      "[READ] List all data sources available for correlation (factors + HTR metrics).",
+    schema: EmptySchema,
+    handler: (db) => listCorrelationSources(db),
+  },
+
+  // ===== WRITE (factors) =====
+  {
+    name: "create_factor_category",
+    tier: "WRITE",
+    description:
+      "[WRITE] Create a factor category (name, optional emoji, sort order).",
+    schema: CreateCategoryInput,
+    handler: (db, args) => createCategory(db, CreateCategoryInput.parse(args)),
+  },
+  {
+    name: "create_factor",
+    tier: "WRITE",
+    description:
+      "[WRITE] Create a trackable factor in a category (scale, labels, unit).",
+    schema: CreateFactorInput,
+    handler: (db, args) => createFactor(db, CreateFactorInput.parse(args)),
+  },
+  {
+    name: "log_factor",
+    tier: "WRITE",
+    description:
+      "[WRITE] Log a factor value for a date (upserts on date + factor).",
+    schema: LogFactorInput,
+    handler: (db, args) => logFactor(db, LogFactorInput.parse(args)),
+  },
+  {
+    name: "bulk_log_factors",
+    tier: "WRITE",
+    description: "[WRITE] Log multiple factor values for a single date at once.",
+    schema: BulkLogFactorsInput,
+    handler: (db, args) => bulkLogFactors(db, BulkLogFactorsInput.parse(args)),
+  },
+  {
+    name: "delete_factor_category",
+    tier: "WRITE",
+    description: "[WRITE] Delete a factor category by id.",
+    schema: IdSchema,
+    handler: (db, args) => {
+      const { id } = IdSchema.parse(args);
+      deleteCategory(db, id);
+      return { deleted: id };
+    },
+  },
+  {
+    name: "delete_factor",
+    tier: "WRITE",
+    description: "[WRITE] Delete a factor by id.",
+    schema: IdSchema,
+    handler: (db, args) => {
+      const { id } = IdSchema.parse(args);
+      deleteFactor(db, id);
+      return { deleted: id };
+    },
+  },
+  {
+    name: "delete_factor_log",
+    tier: "WRITE",
+    description: "[WRITE] Soft-delete a single factor log entry by id.",
+    schema: IdSchema,
+    handler: (db, args) => {
+      const { id } = IdSchema.parse(args);
+      deleteFactorLog(db, id);
+      return { deleted: id };
     },
   },
 ];

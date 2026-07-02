@@ -2,6 +2,7 @@ export { createDb, createAndMigrateDb, schema } from "./db/index.js";
 export type { DB } from "./db/index.js";
 export { seedMeals } from "./db/seed.js";
 export { seedTraining } from "./training/seed.js";
+export { seedFactors } from "./factors/seed.js";
 export { newId } from "./id.js";
 export { setupTestDb } from "./test-helpers.js";
 
@@ -19,3 +20,8 @@ export * from "./goals/engine.js";
 export * from "./training/engine.js";
 export * from "./training/schemas.js";
 export * from "./training/calc.js";
+export * from "./factors/engine.js";
+export * from "./factors/schemas.js";
+export * from "./correlations/series.js";
+export * from "./correlations/stats.js";
+export * from "./correlations/engine.js";
