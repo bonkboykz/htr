@@ -79,7 +79,7 @@ const EXERCISES = [
     defaultRepMin: 8,
     defaultRepMax: 12,
     minIncrementG: 2500,
-    videoQuery: "dumbbell bench press form",
+    videoQuery: "barbell bench press form",
     cuesRu: "Лопатки сведены, штангу опускай к низу груди.",
   },
   {
@@ -310,8 +310,8 @@ const ROUTINE_EXERCISES = [
   { id: "re-a-04", routineId: "routine-a", exerciseId: "ex-leg_press", section: "main", sortOrder: 4, targetSets: 3, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, notes: null },
   { id: "re-a-05", routineId: "routine-a", exerciseId: "ex-bench_press", section: "main", sortOrder: 5, targetSets: 3, repMin: 8, repMax: 10, targetRir: 2, isRampupScaled: 1, notes: null },
   { id: "re-a-06", routineId: "routine-a", exerciseId: "ex-seated_row", section: "main", sortOrder: 6, targetSets: 3, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, notes: null },
-  { id: "re-a-07", routineId: "routine-a", exerciseId: "ex-leg_extension", section: "main", sortOrder: 7, targetSets: 2, repMin: 12, repMax: 15, targetRir: 2, isRampupScaled: 1, notes: null },
-  { id: "re-a-08", routineId: "routine-a", exerciseId: "ex-pec_deck", section: "main", sortOrder: 8, targetSets: 2, repMin: 12, repMax: 15, targetRir: 2, isRampupScaled: 1, notes: null },
+  { id: "re-a-07", routineId: "routine-a", exerciseId: "ex-leg_extension", section: "main", sortOrder: 7, targetSets: 2, repMin: 12, repMax: 15, targetRir: 2, isRampupScaled: 1, isOptional: 1, notes: null },
+  { id: "re-a-08", routineId: "routine-a", exerciseId: "ex-pec_deck", section: "main", sortOrder: 8, targetSets: 2, repMin: 12, repMax: 15, targetRir: 2, isRampupScaled: 1, isOptional: 1, notes: null },
   // reab
   { id: "re-a-09", routineId: "routine-a", exerciseId: "ex-dead_bug", section: "reab", sortOrder: 9, targetSets: 3, repMin: 8, repMax: 8, targetRir: 3, isRampupScaled: 0, notes: null },
   { id: "re-a-10", routineId: "routine-a", exerciseId: "ex-plank", section: "reab", sortOrder: 10, targetSets: 3, repMin: 30, repMax: 45, targetRir: 3, isRampupScaled: 0, notes: "секунды удержания" },
@@ -328,8 +328,8 @@ const ROUTINE_EXERCISES = [
   { id: "re-b-06", routineId: "routine-b", exerciseId: "ex-lat_pulldown", section: "main", sortOrder: 6, targetSets: 3, repMin: 8, repMax: 10, targetRir: 2, isRampupScaled: 1, notes: null },
   { id: "re-b-07", routineId: "routine-b", exerciseId: "ex-shoulder_press", section: "main", sortOrder: 7, targetSets: 3, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, notes: null },
   { id: "re-b-08", routineId: "routine-b", exerciseId: "ex-leg_curl", section: "main", sortOrder: 8, targetSets: 3, repMin: 12, repMax: 15, targetRir: 2, isRampupScaled: 1, notes: null },
-  { id: "re-b-09", routineId: "routine-b", exerciseId: "ex-bicep_curl", section: "main", sortOrder: 9, targetSets: 2, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, notes: null },
-  { id: "re-b-10", routineId: "routine-b", exerciseId: "ex-tricep_pushdown", section: "main", sortOrder: 10, targetSets: 2, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, notes: null },
+  { id: "re-b-09", routineId: "routine-b", exerciseId: "ex-bicep_curl", section: "main", sortOrder: 9, targetSets: 2, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, isOptional: 1, notes: null },
+  { id: "re-b-10", routineId: "routine-b", exerciseId: "ex-tricep_pushdown", section: "main", sortOrder: 10, targetSets: 2, repMin: 10, repMax: 12, targetRir: 2, isRampupScaled: 1, isOptional: 1, notes: null },
   // reab
   { id: "re-b-11", routineId: "routine-b", exerciseId: "ex-hip_thrust", section: "reab", sortOrder: 11, targetSets: 3, repMin: 12, repMax: 15, targetRir: 3, isRampupScaled: 0, notes: "с песочным мешком" },
   { id: "re-b-12", routineId: "routine-b", exerciseId: "ex-bird_dog", section: "reab", sortOrder: 12, targetSets: 3, repMin: 8, repMax: 8, targetRir: 3, isRampupScaled: 0, notes: "на сторону" },

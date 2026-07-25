@@ -14,6 +14,7 @@ export const exercises = sqliteTable("exercises", {
   defaultRepMax: integer("default_rep_max").notNull(),
   minIncrementG: integer("min_increment_g").notNull(), // 2500 upper body, 5000 lower body, 0 = no progression
   videoQuery: text("video_query"),
+  videoUrl: text("video_url"), // curated instructional link; null → app falls back to a YouTube search
   cuesRu: text("cues_ru"),
   isDeleted: integer("is_deleted").notNull().default(0),
   createdAt: text("created_at")
@@ -48,6 +49,7 @@ export const routineExercises = sqliteTable(
     repMax: integer("rep_max").notNull(),
     targetRir: integer("target_rir").notNull(),
     isRampupScaled: integer("is_rampup_scaled").notNull().default(0),
+    isOptional: integer("is_optional").notNull().default(0), // accessory movement the user may skip
     notes: text("notes"),
     isDeleted: integer("is_deleted").notNull().default(0),
   },

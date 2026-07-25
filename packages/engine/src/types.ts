@@ -214,6 +214,7 @@ export interface Exercise {
   defaultRepMax: number;
   minIncrementG: number;
   videoQuery: string | null;
+  videoUrl: string | null;
   cuesRu: string | null;
   isDeleted: number;
   createdAt: string;
@@ -240,6 +241,7 @@ export interface RoutineExercise {
   repMax: number;
   targetRir: number;
   isRampupScaled: number;
+  isOptional: number;
   notes: string | null;
   isDeleted: number;
 }
