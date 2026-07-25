@@ -1197,12 +1197,17 @@ class _HistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<WorkoutCubit>();
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(AppRadii.card),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.card),
-        onTap: () => context.push('/workout/session/${session.id}'),
+        // Reload on return so a deleted/edited session is reflected here. [#delete-refresh]
+        onTap: () async {
+          await context.push('/workout/session/${session.id}');
+          cubit.load();
+        },
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.card),
