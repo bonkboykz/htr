@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme.dart';
 
 /// A labelled -/value/+ control with big tap targets.
+/// Tapping the value (when [onTapValue] is set) lets the user type a number.
 class SetStepper extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback? onMinus;
   final VoidCallback? onPlus;
+  final VoidCallback? onTapValue;
   final Color accent;
 
   const SetStepper({
@@ -16,6 +18,7 @@ class SetStepper extends StatelessWidget {
     required this.value,
     required this.onMinus,
     required this.onPlus,
+    this.onTapValue,
     this.accent = AppColors.accent,
   });
 
@@ -49,15 +52,27 @@ class SetStepper extends StatelessWidget {
                 accent: accent,
               ),
               Expanded(
-                child: Center(
-                  child: Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                child: InkWell(
+                  onTap: onTapValue,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Center(
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          decoration: onTapValue != null
+                              ? TextDecoration.underline
+                              : null,
+                          decorationColor: AppColors.border,
+                          decorationStyle: TextDecorationStyle.dotted,
+                        ),
+                      ),
                     ),
                   ),
                 ),

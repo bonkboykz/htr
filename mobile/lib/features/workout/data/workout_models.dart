@@ -1,4 +1,33 @@
+import 'dart:convert';
+
 import 'package:equatable/equatable.dart';
+
+/// Muscle-group id → Russian label (matches the backend `muscle_group` values).
+const _muscleRu = {
+  'core': 'кор',
+  'shoulders': 'плечи',
+  'quads': 'квадрицепс',
+  'chest': 'грудь',
+  'back': 'спина',
+  'hamstrings': 'бицепс бедра',
+  'glutes': 'ягодицы',
+  'arms': 'руки',
+};
+
+/// Equipment tag → Russian label.
+const _equipmentRu = {
+  'barbell': 'штанга',
+  'bench': 'скамья',
+  'db': 'гантели',
+  'cable': 'блок',
+  'rope': 'канат',
+  'machine': 'тренажёр',
+  'mat': 'коврик',
+  'leg_press': 'жим ногами',
+  'handle': 'рукоять',
+  'bar': 'гриф',
+  'sandbag': 'мешок',
+};
 
 /// GET /api/v1/training/today
 class TrainingToday extends Equatable {
@@ -30,6 +59,7 @@ class RoutineExercise extends Equatable {
   final int repMin;
   final int repMax;
   final int? targetRir;
+  final bool isOptional;
 
   const RoutineExercise({
     required this.id,
@@ -39,6 +69,7 @@ class RoutineExercise extends Equatable {
     required this.repMin,
     required this.repMax,
     required this.targetRir,
+    this.isOptional = false,
   });
 
   factory RoutineExercise.fromJson(Map<String, dynamic> j) => RoutineExercise(
@@ -49,6 +80,7 @@ class RoutineExercise extends Equatable {
         repMin: (j['repMin'] as num?)?.toInt() ?? 0,
         repMax: (j['repMax'] as num?)?.toInt() ?? 0,
         targetRir: (j['targetRir'] as num?)?.toInt(),
+        isOptional: j['isOptional'] == true || j['isOptional'] == 1,
       );
 
   /// "3×8-10" style target label.
@@ -58,7 +90,7 @@ class RoutineExercise extends Equatable {
 
   @override
   List<Object?> get props =>
-      [id, exerciseId, section, targetSets, repMin, repMax, targetRir];
+      [id, exerciseId, section, targetSets, repMin, repMax, targetRir, isOptional];
 }
 
 class Exercise extends Equatable {
@@ -67,6 +99,10 @@ class Exercise extends Equatable {
   final String nameRu;
   final String? cuesRu;
   final int minIncrementG;
+  final String muscleGroup;
+  final List<String> equipment;
+  final String? videoQuery;
+  final String? videoUrl;
 
   const Exercise({
     required this.id,
@@ -74,6 +110,10 @@ class Exercise extends Equatable {
     required this.nameRu,
     required this.cuesRu,
     required this.minIncrementG,
+    this.muscleGroup = '',
+    this.equipment = const [],
+    this.videoQuery,
+    this.videoUrl,
   });
 
   factory Exercise.fromJson(Map<String, dynamic> j) => Exercise(
@@ -82,12 +122,51 @@ class Exercise extends Equatable {
         nameRu: (j['nameRu'] ?? j['name'] ?? '').toString(),
         cuesRu: j['cuesRu']?.toString(),
         minIncrementG: (j['minIncrementG'] as num?)?.toInt() ?? 2500,
+        muscleGroup: (j['muscleGroup'] ?? '').toString(),
+        equipment: _parseEquipment(j['equipment']),
+        videoQuery: j['videoQuery']?.toString(),
+        videoUrl: j['videoUrl']?.toString(),
       );
 
   String get displayName => nameRu.isNotEmpty ? nameRu : name;
 
+  /// Whether this is a dumbbell movement → the UI clarifies "per dumbbell".
+  bool get isDumbbell => equipment.contains('db');
+
+  /// Russian muscle-group label, or null if unknown/empty.
+  String? get muscleLabel => _muscleRu[muscleGroup];
+
+  /// Russian equipment labels for display chips.
+  List<String> get equipmentLabels =>
+      equipment.map((e) => _equipmentRu[e] ?? e).toList();
+
+  /// Curated video link when present, else a YouTube search for the movement.
+  String get videoUrlOrSearch {
+    final url = videoUrl?.trim() ?? '';
+    if (url.isNotEmpty) return url;
+    final q = (videoQuery?.trim().isNotEmpty ?? false)
+        ? videoQuery!.trim()
+        : '$name техника выполнения';
+    return 'https://www.youtube.com/results?search_query='
+        '${Uri.encodeQueryComponent(q)}';
+  }
+
+  bool get hasCuratedVideo => (videoUrl?.trim().isNotEmpty ?? false);
+
   @override
-  List<Object?> get props => [id, name, nameRu, cuesRu, minIncrementG];
+  List<Object?> get props =>
+      [id, name, nameRu, cuesRu, minIncrementG, muscleGroup, equipment, videoUrl];
+}
+
+List<String> _parseEquipment(dynamic raw) {
+  if (raw is List) return raw.map((e) => e.toString()).toList();
+  if (raw is String && raw.trim().isNotEmpty) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) return decoded.map((e) => e.toString()).toList();
+    } catch (_) {}
+  }
+  return const [];
 }
 
 class LastPerformance extends Equatable {
@@ -436,13 +515,28 @@ class SessionDetail extends Equatable {
 }
 
 /// A set already logged this session (for the "Готово" chips).
+/// [id] is the server set_id, so the pill can be edited/deleted live.
 class LoggedSet extends Equatable {
+  final String id;
   final int weightG;
   final int reps;
   final int? rir;
 
-  const LoggedSet({required this.weightG, required this.reps, this.rir});
+  const LoggedSet({
+    required this.id,
+    required this.weightG,
+    required this.reps,
+    this.rir,
+  });
+
+  LoggedSet copyWith({int? weightG, int? reps, int? rir, bool clearRir = false}) =>
+      LoggedSet(
+        id: id,
+        weightG: weightG ?? this.weightG,
+        reps: reps ?? this.reps,
+        rir: clearRir ? null : (rir ?? this.rir),
+      );
 
   @override
-  List<Object?> get props => [weightG, reps, rir];
+  List<Object?> get props => [id, weightG, reps, rir];
 }

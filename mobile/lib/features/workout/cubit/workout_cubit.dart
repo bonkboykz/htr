@@ -2,10 +2,15 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:vibration/vibration.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/rest_timer/rest_alarm.dart';
 import '../data/workout_models.dart';
 import '../data/workout_repository.dart';
+
+/// Default rest between working sets, in seconds.
+const _kRestSeconds = 120;
 
 enum WorkoutStatus { initial, loading, ready, error }
 
@@ -42,6 +47,11 @@ class WorkoutState extends Equatable {
   /// True while a network write (set / finish) is in flight.
   final bool busy;
 
+  /// Rest countdown between sets: seconds remaining (0 = no rest running) and
+  /// the total the countdown started from (for the progress ring).
+  final int restRemaining;
+  final int restTotal;
+
   const WorkoutState({
     this.status = WorkoutStatus.initial,
     this.plan,
@@ -57,6 +67,8 @@ class WorkoutState extends Equatable {
     this.expandedId,
     this.summaryDurationS,
     this.busy = false,
+    this.restRemaining = 0,
+    this.restTotal = 0,
   });
 
   bool get sessionActive => sessionId != null;
@@ -78,6 +90,8 @@ class WorkoutState extends Equatable {
     int? summaryDurationS,
     bool clearSummary = false,
     bool? busy,
+    int? restRemaining,
+    int? restTotal,
   }) {
     return WorkoutState(
       status: status ?? this.status,
@@ -95,6 +109,8 @@ class WorkoutState extends Equatable {
       summaryDurationS:
           clearSummary ? null : (summaryDurationS ?? this.summaryDurationS),
       busy: busy ?? this.busy,
+      restRemaining: restRemaining ?? this.restRemaining,
+      restTotal: restTotal ?? this.restTotal,
     );
   }
 
@@ -114,17 +130,30 @@ class WorkoutState extends Equatable {
         expandedId,
         summaryDurationS,
         busy,
+        restRemaining,
+        restTotal,
       ];
 }
 
 class WorkoutCubit extends Cubit<WorkoutState> {
   final WorkoutRepository _repo;
+  final RestAlarm _restAlarm;
   Timer? _timer;
 
-  WorkoutCubit(this._repo) : super(const WorkoutState());
+  /// Wall-clock anchors so timers stay correct across backgrounding.
+  DateTime? _sessionStart;
+  DateTime? _restEnd;
+  bool _restVibrated = false;
+
+  WorkoutCubit(this._repo, {RestAlarm? restAlarm})
+      : _restAlarm = restAlarm ?? const NoopRestAlarm(),
+        super(const WorkoutState());
 
   Future<void> load() async {
     _timer?.cancel();
+    _sessionStart = null;
+    _restEnd = null;
+    _restAlarm.cancel();
     emit(const WorkoutState(status: WorkoutStatus.loading));
     try {
       final sessions = await _repo.sessions();
@@ -143,6 +172,9 @@ class WorkoutCubit extends Cubit<WorkoutState> {
         final detail = await _repo.sessionDetail(active.id);
         final plan =
             await _repo.plan(active.routineId, active.sessionIndex);
+        _sessionStart =
+            DateTime.tryParse(active.startedAt) ?? DateTime.now();
+        _restEnd = null;
         emit(state.copyWith(
           status: WorkoutStatus.ready,
           today: today,
@@ -204,8 +236,8 @@ class WorkoutCubit extends Cubit<WorkoutState> {
     for (final s in detail.sets) {
       final reId = reIdByExercise[s.exerciseId];
       if (reId == null) continue;
-      (map[reId] ??= <LoggedSet>[])
-          .add(LoggedSet(weightG: s.weightG, reps: s.reps, rir: s.rir));
+      (map[reId] ??= <LoggedSet>[]).add(
+          LoggedSet(id: s.id, weightG: s.weightG, reps: s.reps, rir: s.rir));
     }
     return map;
   }
@@ -218,6 +250,8 @@ class WorkoutCubit extends Cubit<WorkoutState> {
     try {
       final started =
           await _repo.startSession(today.routineId, today.sessionIndex);
+      _sessionStart = DateTime.now();
+      _restEnd = null;
       emit(state.copyWith(
         busy: false,
         live: true,
@@ -269,6 +303,29 @@ class WorkoutCubit extends Cubit<WorkoutState> {
     emit(state.copyWith(inputs: _withInput(id, cur.copyWith(weightG: next))));
   }
 
+  /// Direct set from typed input (tap-to-type on the stepper value).
+  void setWeightG(String id, int grams) {
+    final cur = _inputFor(id);
+    final next = grams.clamp(0, 1 << 30);
+    emit(state.copyWith(inputs: _withInput(id, cur.copyWith(weightG: next))));
+  }
+
+  void setReps(String id, int reps) {
+    final cur = _inputFor(id);
+    final next = reps.clamp(0, 999);
+    emit(state.copyWith(inputs: _withInput(id, cur.copyWith(reps: next))));
+  }
+
+  void setRir(String id, int? rir) {
+    final cur = _inputFor(id);
+    emit(state.copyWith(
+      inputs: _withInput(
+        id,
+        rir == null ? cur.copyWith(clearRir: true) : cur.copyWith(rir: rir.clamp(0, 20)),
+      ),
+    ));
+  }
+
   void stepReps(String id, int delta) {
     final cur = _inputFor(id);
     final next = (cur.reps + delta).clamp(0, 999);
@@ -294,10 +351,80 @@ class WorkoutCubit extends Cubit<WorkoutState> {
 
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!state.sessionActive) return;
-      emit(state.copyWith(elapsedSeconds: state.elapsedSeconds + 1));
-    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  /// Single 1-second ticker. Everything is derived from wall-clock anchors so
+  /// the elapsed clock and the rest countdown stay correct even after the app
+  /// was backgrounded (Dart timers pause while suspended). [#9]
+  void _tick() {
+    final start = _sessionStart;
+    if (start == null) return;
+    final now = DateTime.now();
+
+    var rest = state.restRemaining;
+    if (_restEnd != null) {
+      final left = _restEnd!.difference(now).inSeconds;
+      if (left <= 0) {
+        rest = 0;
+        _restEnd = null;
+        if (!_restVibrated) {
+          _restVibrated = true;
+          _vibrate(); // buzz on the start of the new set
+        }
+      } else {
+        rest = left;
+      }
+    }
+
+    final elapsed = now.difference(start).inSeconds;
+    emit(state.copyWith(
+      elapsedSeconds: elapsed < 0 ? 0 : elapsed,
+      restRemaining: rest,
+    ));
+  }
+
+  // ---------- rest timer between sets ----------
+
+  /// Start (or restart) the rest countdown and arm the lock-screen alarm.
+  void startRest(int seconds) {
+    if (seconds <= 0) return;
+    _restEnd = DateTime.now().add(Duration(seconds: seconds));
+    _restVibrated = false;
+    _restAlarm.schedule(seconds);
+    emit(state.copyWith(restRemaining: seconds, restTotal: seconds));
+  }
+
+  /// Add time to a running rest countdown (e.g. "+30 s").
+  void addRest(int seconds) {
+    if (_restEnd == null) {
+      startRest(seconds);
+      return;
+    }
+    _restEnd = _restEnd!.add(Duration(seconds: seconds));
+    _restVibrated = false;
+    final left = _restEnd!.difference(DateTime.now()).inSeconds;
+    _restAlarm.schedule(left);
+    emit(state.copyWith(
+      restRemaining: left < 0 ? 0 : left,
+      restTotal: state.restTotal + seconds,
+    ));
+  }
+
+  /// Skip the rest immediately.
+  void skipRest() {
+    _restEnd = null;
+    _restVibrated = false;
+    _restAlarm.cancel();
+    emit(state.copyWith(restRemaining: 0));
+  }
+
+  Future<void> _vibrate() async {
+    try {
+      if (await Vibration.hasVibrator()) {
+        Vibration.vibrate(pattern: const [0, 350, 200, 350]);
+      }
+    } catch (_) {}
   }
 
   /// Log one set for [item]. Lazily starts the session (and timer) on the
@@ -316,13 +443,14 @@ class WorkoutCubit extends Cubit<WorkoutState> {
         final started =
             await _repo.startSession(today.routineId, today.sessionIndex);
         sessionId = started.sessionId;
+        _sessionStart = DateTime.now();
         emit(state.copyWith(sessionId: sessionId, elapsedSeconds: 0));
         _startTimer();
       }
 
       final existing = state.logged[re.id] ?? const [];
       final setNumber = existing.length + 1;
-      await _repo.logSet(
+      final setId = await _repo.logSet(
         sessionId,
         exerciseId: item.exercise.id,
         setNumber: setNumber,
@@ -335,9 +463,16 @@ class WorkoutCubit extends Cubit<WorkoutState> {
       final logged = Map<String, List<LoggedSet>>.from(state.logged);
       logged[re.id] = [
         ...existing,
-        LoggedSet(weightG: input.weightG, reps: input.reps, rir: input.rir),
+        LoggedSet(
+            id: setId,
+            weightG: input.weightG,
+            reps: input.reps,
+            rir: input.rir),
       ];
       emit(state.copyWith(logged: logged, busy: false));
+
+      // Rest between working sets (skip the warmup/reab quick-logs).
+      if (re.section == 'main') startRest(_kRestSeconds);
       return true;
     } on ApiException catch (e) {
       emit(state.copyWith(
@@ -349,6 +484,66 @@ class WorkoutCubit extends Cubit<WorkoutState> {
     }
   }
 
+  /// Edit an already-logged set (tap its pill during the live session). [#6]
+  Future<void> editLoggedSet(
+    String reId,
+    int index, {
+    int? weightG,
+    int? reps,
+    int? rir,
+    bool clearRir = false,
+  }) async {
+    final sessionId = state.sessionId;
+    final list = state.logged[reId];
+    if (sessionId == null || list == null || index < 0 || index >= list.length) {
+      return;
+    }
+    final set = list[index];
+    emit(state.copyWith(busy: true, error: null));
+    try {
+      await _repo.updateSet(sessionId, set.id,
+          weightG: weightG, reps: reps, rir: rir);
+      final logged = Map<String, List<LoggedSet>>.from(state.logged);
+      final next = List<LoggedSet>.from(list);
+      next[index] = set.copyWith(
+        weightG: weightG,
+        reps: reps,
+        rir: rir,
+        clearRir: clearRir,
+      );
+      logged[reId] = next;
+      emit(state.copyWith(logged: logged, busy: false));
+    } on ApiException catch (e) {
+      emit(state.copyWith(
+          busy: false, error: e.message, unauthorized: e.isUnauthorized));
+    } catch (e) {
+      emit(state.copyWith(busy: false, error: e.toString()));
+    }
+  }
+
+  /// Delete an already-logged set (e.g. the last one). [#6]
+  Future<void> deleteLoggedSet(String reId, int index) async {
+    final sessionId = state.sessionId;
+    final list = state.logged[reId];
+    if (sessionId == null || list == null || index < 0 || index >= list.length) {
+      return;
+    }
+    final set = list[index];
+    emit(state.copyWith(busy: true, error: null));
+    try {
+      await _repo.deleteSet(sessionId, set.id);
+      final logged = Map<String, List<LoggedSet>>.from(state.logged);
+      final next = List<LoggedSet>.from(list)..removeAt(index);
+      logged[reId] = next;
+      emit(state.copyWith(logged: logged, busy: false));
+    } on ApiException catch (e) {
+      emit(state.copyWith(
+          busy: false, error: e.message, unauthorized: e.isUnauthorized));
+    } catch (e) {
+      emit(state.copyWith(busy: false, error: e.toString()));
+    }
+  }
+
   Future<void> finish() async {
     final sessionId = state.sessionId;
     if (sessionId == null || state.busy) return;
@@ -356,7 +551,11 @@ class WorkoutCubit extends Cubit<WorkoutState> {
     try {
       final duration = await _repo.finish(sessionId);
       _timer?.cancel();
-      emit(state.copyWith(busy: false, summaryDurationS: duration));
+      _sessionStart = null;
+      _restEnd = null;
+      _restAlarm.cancel();
+      emit(state.copyWith(
+          busy: false, summaryDurationS: duration, restRemaining: 0));
     } on ApiException catch (e) {
       emit(state.copyWith(
           busy: false, error: e.message, unauthorized: e.isUnauthorized));
@@ -374,6 +573,7 @@ class WorkoutCubit extends Cubit<WorkoutState> {
   @override
   Future<void> close() {
     _timer?.cancel();
+    _restAlarm.cancel();
     return super.close();
   }
 }
