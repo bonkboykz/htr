@@ -1,6 +1,8 @@
 import 'package:get_it/get_it.dart';
 
 import '../network/api_client.dart';
+import '../rest_timer/notification_rest_alarm.dart';
+import '../rest_timer/rest_alarm.dart';
 import '../storage/token_storage.dart';
 
 final sl = GetIt.instance;
@@ -15,4 +17,7 @@ Future<void> setupDependencies() async {
   final override = await tokens.baseUrlOverride();
   if (override != null && override.isNotEmpty) api.baseUrl = override;
   sl.registerSingleton<ApiClient>(api);
+
+  // Rest-timer alarm (local notification that fires when the phone is locked).
+  sl.registerSingleton<RestAlarm>(await initRestAlarm());
 }

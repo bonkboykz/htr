@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../app/theme.dart';
 import '../../../core/di/di.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/rest_timer/rest_alarm.dart';
 import '../cubit/workout_cubit.dart';
 import '../data/workout_models.dart';
 import '../data/workout_repository.dart';
@@ -51,8 +52,10 @@ class WorkoutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => BlocProvider(
-        create: (_) =>
-            WorkoutCubit(WorkoutRepository(sl<ApiClient>()))..load(),
+        create: (_) => WorkoutCubit(
+          WorkoutRepository(sl<ApiClient>()),
+          restAlarm: sl<RestAlarm>(),
+        )..load(),
         child: const _WorkoutView(),
       );
 }
