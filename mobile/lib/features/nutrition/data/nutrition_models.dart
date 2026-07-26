@@ -92,11 +92,16 @@ class NutritionTarget {
   final int fat;
   final int carbs;
 
+  /// True when there is no explicit daily_targets row and the target was
+  /// derived from the TDEE calorie budget (macros via a 30/25/45 split).
+  final bool isDerived;
+
   const NutritionTarget({
     required this.calories,
     required this.protein,
     required this.fat,
     required this.carbs,
+    this.isDerived = false,
   });
 
   factory NutritionTarget.fromJson(Map<String, dynamic> json) => NutritionTarget(
@@ -104,6 +109,16 @@ class NutritionTarget {
         protein: (json['protein'] as num?)?.toInt() ?? 0,
         fat: (json['fat'] as num?)?.toInt() ?? 0,
         carbs: (json['carbs'] as num?)?.toInt() ?? 0,
+      );
+
+  /// Fallback target from the TDEE calorie budget when no explicit target
+  /// exists. Macros split 30% protein / 25% fat / 45% carbs, stored in tenths.
+  factory NutritionTarget.fromTdeeCalories(int cal) => NutritionTarget(
+        calories: cal,
+        protein: (cal * 0.30 / 4).round() * 10,
+        fat: (cal * 0.25 / 9).round() * 10,
+        carbs: (cal * 0.45 / 4).round() * 10,
+        isDerived: true,
       );
 
   int get proteinG => (protein / 10).round();

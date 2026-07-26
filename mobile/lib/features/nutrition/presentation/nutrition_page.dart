@@ -312,10 +312,8 @@ class _MacroBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tg = targetG;
-    final fill = (tg != null && tg > 0)
-        ? (consumedG / tg).clamp(0.0, 1.0)
-        : (consumedG > 0 ? 0.6 : 0.0);
-    final valueText = tg != null ? '$consumedG / $tg г' : '$consumedG г';
+    final fill = (tg != null && tg > 0) ? (consumedG / tg).clamp(0.0, 1.0) : 0.0;
+    final valueText = (tg != null && tg > 0) ? '$consumedG / $tg г' : '$consumedG г';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

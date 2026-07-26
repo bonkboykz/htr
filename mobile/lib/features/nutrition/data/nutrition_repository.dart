@@ -37,9 +37,18 @@ class NutritionRepository {
       (map['totals'] as Map?)?.cast<String, dynamic>() ?? const {},
     );
     final targetJson = map['target'];
-    final target = targetJson is Map
+    var target = targetJson is Map
         ? NutritionTarget.fromJson(targetJson.cast<String, dynamic>())
         : null;
+
+    // No explicit daily_targets row → fall back to the TDEE calorie budget
+    // (same target the "Сегодня" screen shows), so the progress bar tracks it.
+    if (target == null || target.calories <= 0) {
+      final tdeeCal = await _tdeeTargetCalories(date);
+      if (tdeeCal != null && tdeeCal > 0) {
+        target = NutritionTarget.fromTdeeCalories(tdeeCal);
+      }
+    }
 
     return NutritionDay(
       date: (map['date'] ?? date).toString(),
@@ -47,6 +56,20 @@ class NutritionRepository {
       totals: totals,
       target: target,
     );
+  }
+
+  /// TDEE-based calorie target from the daily summary's caloriesBudget.
+  /// Best-effort — returns null if there's no profile/goal to compute it.
+  Future<int?> _tdeeTargetCalories(String date) async {
+    try {
+      final json = await _api.get('/api/v1/daily/$date');
+      final map = (json as Map).cast<String, dynamic>();
+      final budget = (map['caloriesBudget'] as Map?)?.cast<String, dynamic>();
+      final cal = (budget?['targetCalories'] as num?)?.toInt();
+      return cal;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<Map<String, String>> _foodNames() async {
