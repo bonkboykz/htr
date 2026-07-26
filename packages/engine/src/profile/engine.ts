@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { DB } from "../db/index.js";
 import { schema } from "../db/index.js";
 import type { UserProfile, TdeeCalculation } from "../types.js";
-import { getLatestWeight } from "../weight/engine.js";
+import { getLatestWeight, getWeightTrend } from "../weight/engine.js";
 
 const ACTIVITY_MULTIPLIERS: Record<string, number> = {
   sedentary: 1.2,
@@ -109,7 +109,15 @@ export function getTargetCalories(db: DB, date?: string): TdeeCalculation | null
   const latestWeight = getLatestWeight(db);
   if (!latestWeight) return null;
 
-  const bmr = calculateBmr(profile, latestWeight.weightGrams, date);
+  // Use the EMA-smoothed weight trend rather than a single raw weigh-in, so the
+  // TDEE/target don't jump on day-to-day water/salt noise. As weight trends
+  // down the target recalculates smoothly. Falls back to the latest entry when
+  // the trend window (30d) has no data.
+  const trend = getWeightTrend(db, 30);
+  const weightForBmr =
+    trend.entries.length > 0 ? trend.trendGrams : latestWeight.weightGrams;
+
+  const bmr = calculateBmr(profile, weightForBmr, date);
   const tdee = calculateTdee(bmr, profile.activityLevel);
 
   // Check for active weight goal
