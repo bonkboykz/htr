@@ -67,7 +67,10 @@ class _Content extends StatelessWidget {
           const SizedBox(height: 16),
           _CaloriesCard(budget: s.caloriesBudget, totals: s.nutrition),
           const SizedBox(height: 12),
-          _MacrosCard(totals: s.nutrition),
+          _MacrosCard(
+            totals: s.nutrition,
+            targetCalories: s.caloriesBudget?.targetCalories ?? 0,
+          ),
           const SizedBox(height: 12),
           _MiniRow(water: s.water, sleep: s.sleep, weight: s.weight),
           const SizedBox(height: 12),
@@ -229,10 +232,18 @@ class _LegendRow extends StatelessWidget {
 
 class _MacrosCard extends StatelessWidget {
   final NutritionTotals totals;
-  const _MacrosCard({required this.totals});
+
+  /// TDEE calorie target; macro targets derive from it (30/25/45 split).
+  final int targetCalories;
+  const _MacrosCard({required this.totals, required this.targetCalories});
 
   @override
   Widget build(BuildContext context) {
+    // Macro targets (tenths of grams) from the calorie target when available.
+    final c = targetCalories;
+    final proteinTgt = c > 0 ? (c * 0.30 / 4).round() * 10 : 0;
+    final fatTgt = c > 0 ? (c * 0.25 / 9).round() * 10 : 0;
+    final carbsTgt = c > 0 ? (c * 0.45 / 4).round() * 10 : 0;
     return _Panel(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,6 +253,7 @@ class _MacrosCard extends StatelessWidget {
               label: 'Белки',
               value: totals.proteinFormatted,
               tenths: totals.protein,
+              targetTenths: proteinTgt,
               color: AppColors.accent,
             ),
           ),
@@ -251,6 +263,7 @@ class _MacrosCard extends StatelessWidget {
               label: 'Жиры',
               value: totals.fatFormatted,
               tenths: totals.fat,
+              targetTenths: fatTgt,
               color: AppColors.amber,
             ),
           ),
@@ -260,6 +273,7 @@ class _MacrosCard extends StatelessWidget {
               label: 'Углеводы',
               value: totals.carbsFormatted,
               tenths: totals.carbs,
+              targetTenths: carbsTgt,
               color: AppColors.green,
             ),
           ),
@@ -273,19 +287,21 @@ class _MacroBar extends StatelessWidget {
   final String label;
   final String value;
   final int tenths;
+  final int targetTenths;
   final Color color;
   const _MacroBar({
     required this.label,
     required this.value,
     required this.tenths,
+    required this.targetTenths,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    // No macro target in the payload; show a proportional visual fill so the
-    // accent color reads clearly.
-    final fill = tenths <= 0 ? 0.0 : 0.6;
+    // Real fill against the (derived) target; 0 if there's no target at all.
+    final fill =
+        targetTenths > 0 ? (tenths / targetTenths).clamp(0.0, 1.0) : 0.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -310,6 +326,14 @@ class _MacroBar extends StatelessWidget {
             valueColor: AlwaysStoppedAnimation(color),
           ),
         ),
+        if (targetTenths > 0) ...[
+          const SizedBox(height: 6),
+          Text('из ${(targetTenths / 10).round()} г',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.textMuted)),
+        ],
       ],
     );
   }
