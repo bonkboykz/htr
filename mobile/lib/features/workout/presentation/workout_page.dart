@@ -544,8 +544,9 @@ class _SimpleRow extends StatelessWidget {
     final logged = context
             .select<WorkoutCubit, int>((c) => c.state.logged[re.id]?.length ?? 0);
     final done = logged >= re.targetSets && re.targetSets > 0;
+    final inProgress = logged > 0 && !done;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           Container(
@@ -554,29 +555,41 @@ class _SimpleRow extends StatelessWidget {
             decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
           ),
           const SizedBox(width: 12),
+          // Name + "how-to" affordance — tap opens the technique sheet.
           Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    item.exercise.displayName,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: done ? AppColors.textMuted : AppColors.textPrimary,
-                      decoration: done ? TextDecoration.lineThrough : null,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _openExerciseInfo(context, item.exercise),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        item.exercise.displayName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              done ? AppColors.textMuted : AppColors.textPrimary,
+                          decoration: done ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
                     ),
-                  ),
+                    if (re.isOptional) ...[
+                      const SizedBox(width: 8),
+                      const _OptionalBadge(),
+                    ],
+                    const SizedBox(width: 6),
+                    Icon(LucideIcons.playCircle,
+                        size: 15, color: AppColors.textMuted),
+                  ],
                 ),
-                if (re.isOptional) ...[
-                  const SizedBox(width: 8),
-                  const _OptionalBadge(),
-                ],
-              ],
+              ),
             ),
           ),
           Text(
-            re.setsRepsLabel,
+            inProgress ? '$logged/${re.targetSets}' : re.setsRepsLabel,
             style: TextStyle(
               color: accent == AppColors.danger
                   ? AppColors.danger
@@ -586,9 +599,9 @@ class _SimpleRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _RoundIconButton(
-            icon: done ? Icons.check : Icons.play_arrow,
-            color: accent,
+          _DoneButton(
+            done: done,
+            accent: accent,
             onTap: () => context.read<WorkoutCubit>().logSet(item),
           ),
         ],
@@ -597,25 +610,130 @@ class _SimpleRow extends StatelessWidget {
   }
 }
 
-class _RoundIconButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
+/// Warmup/reab "mark a set done" control: a tickable check (not a play icon).
+/// Bordered check when pending → filled green check when the target is met.
+class _DoneButton extends StatelessWidget {
+  final bool done;
+  final Color accent;
   final VoidCallback onTap;
-  const _RoundIconButton(
-      {required this.icon, required this.color, required this.onTap});
+  const _DoneButton(
+      {required this.done, required this.accent, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
-      shape: CircleBorder(side: BorderSide(color: color.withValues(alpha: 0.5))),
+      color: done ? AppColors.green : Colors.transparent,
+      shape: done
+          ? const CircleBorder()
+          : CircleBorder(side: BorderSide(color: accent.withValues(alpha: 0.5))),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
           width: 40,
           height: 40,
-          child: Icon(icon, size: 20, color: color),
+          child: Icon(Icons.check,
+              size: 20, color: done ? Colors.white : accent),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet with an exercise's muscles, equipment, coaching cues and a
+/// "Смотреть технику" link — reachable from warmup/reab rows (which have no
+/// expanded card). [technique-for-all]
+void _openExerciseInfo(BuildContext context, Exercise ex) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => _ExerciseInfoSheet(exercise: ex),
+  );
+}
+
+class _ExerciseInfoSheet extends StatelessWidget {
+  final Exercise exercise;
+  const _ExerciseInfoSheet({required this.exercise});
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <Widget>[];
+    final muscle = exercise.muscleLabel;
+    if (muscle != null) {
+      chips.add(_MetaChip(icon: LucideIcons.target, text: muscle));
+    }
+    for (final e in exercise.equipmentLabels) {
+      chips.add(_MetaChip(icon: LucideIcons.dumbbell, text: e));
+    }
+    final cues = exercise.cuesRu?.trim() ?? '';
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    exercise.displayName,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+            if (chips.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Wrap(spacing: 12, runSpacing: 6, children: chips),
+            ],
+            if (cues.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.accentSoft,
+                  borderRadius: BorderRadius.circular(AppRadii.inner),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.lightbulb_outline,
+                        size: 18, color: AppColors.accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(cues,
+                          style: const TextStyle(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _openVideo(context, exercise);
+                },
+                icon: const Icon(LucideIcons.playCircle, size: 20),
+                label: const Text('Смотреть технику'),
+              ),
+            ),
+          ],
         ),
       ),
     );
