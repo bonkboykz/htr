@@ -557,3 +557,68 @@ CMD ["node", "apps/api/dist/index.js"]
 ```
 
 Volume: `/data` for persistent SQLite database on Railway.
+
+## Держать Plane актуальным (обязательно)
+
+Проект ведётся в **self-hosted Plane** (`https://plane.team.rama.gg`), workspace `personal`,
+проект **HTR — Health Tracker** (identifier `HTR`).
+`project_id` = `e7284890-2fe1-46fe-bffd-07a02a8df931`.
+Ссылка: https://plane.team.rama.gg/personal/projects/e7284890-2fe1-46fe-bffd-07a02a8df931/issues/
+Синхронизируй через **Plane MCP** по ходу работы:
+
+- **Начал** крупную задачу → переведи её в **In Progress** (`update_work_item`, поле `state`).
+- **Завершил** (проверенная фича закоммичена и запушена в `main`) → переведи в **Ready to Deploy**
+  и добавь короткий комментарий со ссылкой на коммит/суть (`create_work_item_comment`). В **Done** —
+  только когда выкачено в прод (Railway) и проверено там.
+- **Новая** планируемая работа (из кода/обсуждения) → заведи через `create_work_item` в нужном
+  статусе (Todo/Backlog) с подходящей меткой. **Приоритеты не проставляй** — решение пользователя.
+- Перед созданием проверь `search_work_items`, чтобы не плодить дубликаты; ищи по заголовку.
+- Если MCP-вызов падает — повтори; при иной ошибке честно сообщи и не выдавай за сделанное.
+
+**Эпики — это МОДУЛИ Plane.** Модули = этапы/области продукта, циклы = спринты; задача может быть
+одновременно в обоих.
+
+| Модуль | module_id |
+| ------ | --------- |
+| Движок и API              | `66c084d7-e430-4f60-b197-466ce2167de7` |
+| Тренировки и MCP          | `d6545e0d-2b69-46a9-a079-fabaa5cc59cb` |
+| Факторы и корреляции      | `796f1933-5024-4508-ba62-f129ff5a90e1` |
+| Мобильный клиент (Flutter)| `a18c4251-26b7-45a0-8140-65d73f55543e` |
+| Аналитика и Insights      | `a66a63ff-6940-4b69-b4f0-d942382a77f1` |
+| Инфра и деплой            | `16643e06-ce50-4eb2-a08f-75a10573f815` |
+
+Метки: `engine` `api` `mcp` `mobile` `db` `infra` `docs` `design` `Bug`.
+
+Статусы (2026-08-06): `Backlog` / `Todo` / `In Progress` / `In Review` / `QA` /
+`Ready to Deploy` / `Done` / `Cancelled` / `Duplicate`. Четыре средних (`In Progress`,
+`In Review`, `QA`, `Ready to Deploy`) — группа `started`, поэтому в burndown они считаются
+незакрытыми: `Done` = выкачено в прод, не «смёржено». `Cancelled` и `Duplicate` — группа `cancelled`.
+
+**Циклы (Cycles)** включены. Двухнедельные, аналог Linear Cycles. Первый:
+`Cycle 1` = 2026-08-10 → 2026-08-23 (`3cb7fa89-5150-4455-a447-f34448dc38cc`).
+Закрывая цикл, незавершённое переносится через `transfer_cycle_work_items`.
+
+**Оценки (estimates).** В Community вся estimate-группа API отдаёт 404 — шкала заводится
+**только через UI** (Settings → Estimates). После включения проставь пару задач руками
+и вычитай UUID точек через `list_work_items(fields: "estimate_point")`, затем впиши сюда:
+
+| Оценка | UUID точки |
+| ------ | ---------- |
+| TODO   | шкала ещё не включена в UI — заполнить после Settings → Estimates |
+
+Пиши оценку строго в `estimate_point` (FK на точку шкалы); legacy-поле `point` UI и burndown
+игнорируют.
+
+⚠️ Совместимость с MCP (инстанс Community **v1.4.0**):
+- **PQL-фильтры не поддерживаются вообще** — фильтруй на клиенте, выкачивая страницы по 100.
+- `retrieve_work_item_by_identifier` работает **только с `expand: "labels"`**.
+- Фильтр `external_id` в `list_work_items` не работает.
+- **404 отдают**: `get_features`, `update_project_features` (фичи включаются через `update_project`:
+  `cycle_view`, `module_view`, `issue_views_view`, `page_view`), вся estimate-группа и **вся
+  worklog-группа** (time tracking — фича Plane Pro, в Community её нет; `is_time_tracking_enabled`
+  ставится, но кнопки «Log work» нет). Не тратить на это попытки.
+- `create_state` **игнорирует `sequence`** — статус дописывается в конец группы.
+- `comment_html` принимает **сырой HTML** — теги не экранировать (иначе видно `&lt;p&gt;`).
+
+**Доступ.** MCP-сервер `plane` зарегистрирован глобально и работает сам; отдельных REST-кредов
+для HTR не заводили — всё через MCP.
